@@ -1,6 +1,7 @@
 """Bullhorn CRM MCP Server - Query jobs and candidates via natural language."""
 
 import json
+import os
 from mcp.server.fastmcp import FastMCP
 
 from .config import BullhornConfig
@@ -30,6 +31,45 @@ def get_client() -> BullhornClient:
 def format_response(data: list | dict) -> str:
     """Format API response as readable JSON."""
     return json.dumps(data, indent=2, default=str)
+
+@mcp.tool()
+def connection_status() -> str:
+    """Check whether Bullhorn API credentials are configured and connectivity is available."""
+
+    required_vars = [
+        "BULLHORN_CLIENT_ID",
+        "BULLHORN_CLIENT_SECRET",
+        "BULLHORN_USERNAME",
+        "BULLHORN_PASSWORD",
+    ]
+
+    missing = [name for name in required_vars if not os.getenv(name)]
+
+    if missing:
+        return format_response({
+            "configured": False,
+            "connected": False,
+            "message": "Bullhorn credentials have not been configured yet.",
+            "missing_variables": missing,
+        })
+
+    try:
+        client = get_client()
+        session = client.auth.session
+
+        return format_response({
+            "configured": True,
+            "connected": True,
+            "message": "Successfully connected to Bullhorn.",
+            "rest_url": session.rest_url,
+        })
+
+    except Exception as e:
+        return format_response({
+            "configured": True,
+            "connected": False,
+            "message": f"Bullhorn connection failed: {e}",
+        })
 
 
 @mcp.tool()
