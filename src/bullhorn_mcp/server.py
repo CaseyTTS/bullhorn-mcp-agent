@@ -205,6 +205,33 @@ def get_candidate(candidate_id: int, fields: str | None = None) -> str:
 
 
 @mcp.tool()
+def get_candidate_files(candidate_id: int) -> str:
+    """List file attachments for a Bullhorn Candidate."""
+    try:
+        client = get_client()
+        result = client.get_candidate_files(candidate_id)
+        return format_response(result)
+
+    except (AuthenticationError, BullhornAPIError, ValueError) as e:
+        return f"ERROR: {e}"
+
+
+@mcp.tool()
+def upload_candidate_resume(candidate_id: int, file_path: str) -> str:
+    """Upload a local resume file to a Bullhorn Candidate."""
+    try:
+        client = get_client()
+        result = client.upload_candidate_resume(
+            candidate_id=candidate_id,
+            file_path=file_path,
+        )
+        return format_response(result)
+
+    except (AuthenticationError, BullhornAPIError, ValueError) as e:
+        return f"ERROR: {e}"
+
+
+@mcp.tool()
 def search_entities(
     entity: str,
     query: str,

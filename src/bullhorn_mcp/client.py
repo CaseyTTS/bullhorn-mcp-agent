@@ -1,6 +1,8 @@
 """Bullhorn REST API client."""
 
 import httpx
+import mimetypes
+from pathlib import Path
 from typing import Any
 
 from .auth import BullhornAuth
@@ -156,6 +158,100 @@ class BullhornClient:
         params = {"fields": "*"}
         return self._request("GET", f"/meta/{entity}", params)
 
+    def get_candidate_files(self, candidate_id: int) -> list[dict[str, Any]]:
+        """Get file attachments for a Bullhorn Candidate."""
+        if candidate_id <= 0:
+            raise ValueError("candidate_id must be a positive integer")
+
+        result = self._request(
+            "GET",
+            f"/entity/Candidate/{candidate_id}/fileAttachments",
+            params={"fields": "*"},
+        )
+
+        return result.get("data", [])
+
+    def upload_candidate_resume(
+        self,
+        candidate_id: int,
+        file_path: str,
+    ) -> dict[str, Any]:
+        """Upload a resume file to a Bullhorn Candidate."""
+        if candidate_id <= 0:
+            raise ValueError("candidate_id must be a positive integer")
+
+        path = Path(file_path)
+
+        if not path.exists() or not path.is_file():
+            raise ValueError(f"Resume file does not exist: {file_path}")
+
+        session = self.auth.session
+
+        url = (
+            f"{session.rest_url}"
+            f"/file/Candidate/{candidate_id}/raw"
+        )
+
+        headers = {
+            "BhRestToken": session.bh_rest_token,
+        }
+
+        content_type = (
+            mimetypes.guess_type(path.name)[0]
+            or "application/octet-stream"
+        )
+
+        params = {
+            "externalID": "Portfolio",
+            "fileType": "SAMPLE",
+        }
+
+        with path.open("rb") as file_handle:
+            files = {
+                "file": (
+                    path.name,
+                    file_handle,
+                    content_type,
+                )
+            }
+
+            with httpx.Client() as client:
+                response = client.put(
+                    url,
+                    params=params,
+                    headers=headers,
+                    files=files,
+                )
+
+                if response.status_code == 401:
+                    self.auth._refresh_session()
+                    session = self.auth.session
+
+                    headers = {
+                        "BhRestToken": session.bh_rest_token,
+                    }
+
+                    url = (
+                        f"{session.rest_url}"
+                        f"/file/Candidate/{candidate_id}/raw"
+                    )
+
+                    file_handle.seek(0)
+
+                    response = client.put(
+                        url,
+                        params=params,
+                        headers=headers,
+                        files=files,
+                    )
+
+                if response.status_code != 200:
+                    raise BullhornAPIError(
+                        "Resume upload failed: "
+                        f"{response.status_code} - {response.text}"
+                    )
+
+                return response.json()
 
 class BullhornAPIError(Exception):
     """Raised when Bullhorn API request fails."""
