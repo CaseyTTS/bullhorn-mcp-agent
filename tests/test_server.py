@@ -238,6 +238,47 @@ class TestFormatResponse:
         assert "2024" in result
 
 
+class TestCandidateFiles:
+    """Tests for candidate file MCP tools."""
+
+    def test_get_candidate_files(self, mock_client):
+        mock_client.get_candidate_files.return_value = [
+            {
+                "id": 111,
+                "name": "John_Smith_Resume.pdf",
+                "contentType": "application/pdf",
+            }
+        ]
+
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.get_candidate_files(candidate_id=67890)
+
+        data = json.loads(result)
+
+        assert len(data) == 1
+        assert data[0]["name"] == "John_Smith_Resume.pdf"
+        mock_client.get_candidate_files.assert_called_once_with(67890)
+
+    def test_upload_candidate_resume(self, mock_client):
+        mock_client.upload_candidate_resume.return_value = {
+            "fileId": 222,
+            "fileName": "resume.pdf",
+        }
+
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.upload_candidate_resume(
+                candidate_id=67890,
+                file_path=r"C:\temp\resume.pdf",
+            )
+
+        data = json.loads(result)
+
+        assert data["fileId"] == 222
+        mock_client.upload_candidate_resume.assert_called_once_with(
+            candidate_id=67890,
+            file_path=r"C:\temp\resume.pdf",
+        )
+
 class TestMCPServerSetup:
     """Tests for MCP server configuration."""
 
