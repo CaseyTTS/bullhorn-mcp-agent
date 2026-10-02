@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from .config import BullhornConfig
 from .auth import BullhornAuth, AuthenticationError
 from .client import BullhornClient, BullhornAPIError
+from datetime import datetime, timedelta, timezone
 
 # Initialize MCP server
 mcp = FastMCP(
@@ -203,6 +204,34 @@ def get_candidate(candidate_id: int, fields: str | None = None) -> str:
     except (AuthenticationError, BullhornAPIError) as e:
         return f"ERROR: {e}"
 
+
+@mcp.tool()
+def get_recent_placements(days: int = 30, limit: int = 100) -> str:
+    """Get recent Bullhorn placements from the last X days."""
+    if days < 1 or days > 365:
+        return "ERROR: days must be between 1 and 365"
+
+    if limit < 1 or limit > 500:
+        return "ERROR: limit must be between 1 and 500"
+
+    try:
+        client = get_client()
+
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+        start_ms = int(start_date.timestamp() * 1000)
+
+        results = client.query(
+            entity="Placement",
+            where=f"dateAdded >= {start_ms}",
+            fields=None,
+            count=limit,
+            order_by="-dateAdded",
+        )
+
+        return format_response(results)
+
+    except (AuthenticationError, BullhornAPIError) as e:
+        return f"ERROR: {e}"
 
 @mcp.tool()
 def get_candidate_files(candidate_id: int) -> str:
