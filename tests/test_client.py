@@ -328,3 +328,62 @@ class TestEdgeCases:
         client.search("UnknownEntity", "someField:value")
 
         assert "fields=id" in str(route.calls[0].request.url)
+
+    @respx.mock
+    def test_get_candidate_files(self, mock_auth, mock_session):
+        respx.get(
+            f"{mock_session.rest_url}/entity/Candidate/67890/fileAttachments"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "id": 111,
+                            "name": "John_Smith_Resume.pdf",
+                            "contentType": "application/pdf",
+                        }
+                    ]
+                },
+            )
+        )
+
+        client = BullhornClient(mock_auth)
+
+        result = client.get_candidate_files(67890)
+
+        assert len(result) == 1
+        assert result[0]["name"] == "John_Smith_Resume.pdf"
+
+
+    @respx.mock
+    def test_upload_candidate_resume(
+        self,
+        mock_auth,
+        mock_session,
+        tmp_path,
+    ):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"%PDF-1.4 fake resume")
+
+        route = respx.put(
+            f"{mock_session.rest_url}/file/Candidate/67890/raw"
+        ).mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "fileId": 222,
+                    "fileName": "resume.pdf",
+                },
+            )
+        )
+
+        client = BullhornClient(mock_auth)
+
+        result = client.upload_candidate_resume(
+            candidate_id=67890,
+            file_path=str(resume_file),
+        )
+
+        assert result["fileId"] == 222
+        assert route.called
