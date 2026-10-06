@@ -175,6 +175,8 @@ class BullhornClient:
         self,
         candidate_id: int,
         file_path: str,
+        file_type: str = "SAMPLE",
+        external_id: str = "Portfolio",
     ) -> dict[str, Any]:
         """Upload a resume file to a Bullhorn Candidate."""
         if candidate_id <= 0:
@@ -202,8 +204,8 @@ class BullhornClient:
         )
 
         params = {
-            "externalID": "Portfolio",
-            "fileType": "SAMPLE",
+            "externalID": external_id,
+            "fileType": file_type,
         }
 
         with path.open("rb") as file_handle:
@@ -252,6 +254,42 @@ class BullhornClient:
                     )
 
                 return response.json()
+
+    def describe_resume_upload(
+        self,
+        candidate_id: int,
+        file_path: str,
+        file_type: str = "SAMPLE",
+        external_id: str = "Portfolio",
+    ) -> dict[str, Any]:
+        """Describe what an upload_candidate_resume call would do.
+
+        Performs the same validation as upload_candidate_resume (candidate_id
+        must be positive, file must exist) and returns a descriptive dict -
+        but makes no network call whatsoever. This powers dry-run previews so
+        that a dry-run surfaces the same validation errors a live call would.
+        """
+        if candidate_id <= 0:
+            raise ValueError("candidate_id must be a positive integer")
+
+        path = Path(file_path)
+
+        if not path.exists() or not path.is_file():
+            raise ValueError(f"Resume file does not exist: {file_path}")
+
+        content_type = (
+            mimetypes.guess_type(path.name)[0]
+            or "application/octet-stream"
+        )
+
+        return {
+            "candidate_id": candidate_id,
+            "file_name": path.name,
+            "file_size_bytes": path.stat().st_size,
+            "content_type": content_type,
+            "file_type": file_type,
+            "external_id": external_id,
+        }
 
 class BullhornAPIError(Exception):
     """Raised when Bullhorn API request fails."""

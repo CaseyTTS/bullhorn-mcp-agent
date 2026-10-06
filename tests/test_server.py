@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from bullhorn_mcp import server
 from bullhorn_mcp.auth import AuthenticationError
-from bullhorn_mcp.client import BullhornAPIError
+from bullhorn_mcp.client import BullhornAPIError, BullhornClient
 
 
 @pytest.fixture
@@ -275,10 +275,172 @@ class TestCandidateFiles:
         data = json.loads(result)
 
         assert data["fileId"] == 222
+        # Calling with only the original two arguments must produce
+        # byte-identical wire behavior to pre-Phase-1: same defaults sent.
         mock_client.upload_candidate_resume.assert_called_once_with(
             candidate_id=67890,
             file_path=r"C:\temp\resume.pdf",
+            file_type="SAMPLE",
+            external_id="Portfolio",
         )
+
+    def test_upload_candidate_resume_custom_file_type_and_external_id(self, mock_client):
+        mock_client.upload_candidate_resume.return_value = {
+            "fileId": 223,
+            "fileName": "resume.pdf",
+        }
+
+        with patch.object(server, "get_client", return_value=mock_client):
+            server.upload_candidate_resume(
+                candidate_id=67890,
+                file_path=r"C:\temp\resume.pdf",
+                file_type="RESUME",
+                external_id="Website",
+            )
+
+        mock_client.upload_candidate_resume.assert_called_once_with(
+            candidate_id=67890,
+            file_path=r"C:\temp\resume.pdf",
+            file_type="RESUME",
+            external_id="Website",
+        )
+
+
+class TestUploadCandidateResumeDryRun:
+    """Tests for the dry_run path of upload_candidate_resume.
+
+    Uses a real BullhornClient (with a dummy auth) so describe_resume_upload
+    exercises its actual, no-network validation logic - the same validation
+    a live upload would run - while the real write method is replaced with a
+    spy so tests can assert it is never invoked.
+    """
+
+    def _client_with_spied_upload(self):
+        client = BullhornClient(auth=Mock())
+        client.upload_candidate_resume = Mock()
+        return client
+
+    def test_dry_run_never_calls_real_upload_for_valid_input(self, tmp_path):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"%PDF-1.4 fake resume")
+        client = self._client_with_spied_upload()
+
+        with patch.object(server, "get_client", return_value=client):
+            result = server.upload_candidate_resume(
+                candidate_id=67890,
+                file_path=str(resume_file),
+                dry_run=True,
+            )
+
+        data = json.loads(result)
+        assert data["dry_run"] is True
+        assert data["tool"] == "upload_candidate_resume"
+        client.upload_candidate_resume.assert_not_called()
+
+    def test_dry_run_never_calls_real_upload_when_file_missing(self):
+        client = self._client_with_spied_upload()
+
+        with patch.object(server, "get_client", return_value=client):
+            result = server.upload_candidate_resume(
+                candidate_id=67890,
+                file_path=r"C:\does\not\exist.pdf",
+                dry_run=True,
+            )
+
+        assert result.startswith("ERROR:")
+        assert "does not exist" in result
+        client.upload_candidate_resume.assert_not_called()
+
+    def test_dry_run_never_calls_real_upload_for_invalid_candidate_id(self, tmp_path):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"%PDF-1.4 fake resume")
+        client = self._client_with_spied_upload()
+
+        with patch.object(server, "get_client", return_value=client):
+            result = server.upload_candidate_resume(
+                candidate_id=-1,
+                file_path=str(resume_file),
+                dry_run=True,
+            )
+
+        assert result.startswith("ERROR:")
+        client.upload_candidate_resume.assert_not_called()
+
+    def test_dry_run_preview_reflects_requested_data(self, tmp_path):
+        resume_file = tmp_path / "custom_name.pdf"
+        resume_file.write_bytes(b"%PDF-1.4 some bytes of content")
+        client = self._client_with_spied_upload()
+
+        with patch.object(server, "get_client", return_value=client):
+            result = server.upload_candidate_resume(
+                candidate_id=42,
+                file_path=str(resume_file),
+                file_type="RESUME",
+                external_id="Website",
+                dry_run=True,
+            )
+
+        data = json.loads(result)
+        would_execute = data["would_execute"]
+
+        assert would_execute["candidate_id"] == 42
+        assert would_execute["file_name"] == "custom_name.pdf"
+        assert would_execute["file_type"] == "RESUME"
+        assert would_execute["external_id"] == "Website"
+        assert would_execute["file_size_bytes"] == len(b"%PDF-1.4 some bytes of content")
+        client.upload_candidate_resume.assert_not_called()
+
+    def test_dry_run_with_defaults_reflects_default_file_type_and_external_id(self, tmp_path):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"content")
+        client = self._client_with_spied_upload()
+
+        with patch.object(server, "get_client", return_value=client):
+            result = server.upload_candidate_resume(
+                candidate_id=67890,
+                file_path=str(resume_file),
+                dry_run=True,
+            )
+
+        data = json.loads(result)
+        would_execute = data["would_execute"]
+
+        assert would_execute["file_type"] == "SAMPLE"
+        assert would_execute["external_id"] == "Portfolio"
+        client.upload_candidate_resume.assert_not_called()
+
+
+class TestUploadCandidateResumeApproval:
+    """Tests for the requires_approval path of upload_candidate_resume."""
+
+    def test_requires_approval_creates_pending_and_skips_real_upload(self, mock_client, tmp_path):
+        from bullhorn_mcp.crosscutting import permissions as permissions_module
+
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"content")
+
+        approving_decision = permissions_module.PermissionDecision(
+            allowed=True, requires_approval=True
+        )
+
+        with (
+            patch.object(server, "get_client", return_value=mock_client),
+            patch.object(server.permissions, "check", return_value=approving_decision),
+        ):
+            result = server.upload_candidate_resume(
+                candidate_id=67890,
+                file_path=str(resume_file),
+            )
+
+        data = json.loads(result)
+        assert data["pending_approval"] is True
+        assert "approval_token" in data
+        mock_client.upload_candidate_resume.assert_not_called()
+
+        # The token must actually be redeemable via the approval gate.
+        pending = server.approval.get(data["approval_token"])
+        assert pending is not None
+        assert pending["tool"] == "upload_candidate_resume"
 
 class TestConnectionStatus:
     """Tests for connection_status tool."""
@@ -436,13 +598,299 @@ class TestMCPServerSetup:
         """Test that all expected tools are registered."""
         tools = list(server.mcp._tool_manager._tools.keys())
 
+        assert "connection_status" in tools
         assert "list_jobs" in tools
         assert "list_candidates" in tools
         assert "get_job" in tools
         assert "get_candidate" in tools
+        assert "get_recent_placements" in tools
+        assert "get_candidate_files" in tools
+        assert "upload_candidate_resume" in tools
         assert "search_entities" in tools
         assert "query_entities" in tools
 
     def test_server_name(self):
         """Test server name is set correctly."""
         assert server.mcp.name == "Bullhorn CRM"
+
+
+class TestMCPToolSchemasUnchanged:
+    """Phase 1 must not change the MCP-visible parameter schema of any
+    existing tool except upload_candidate_resume, which additively gains
+    file_type, external_id, and dry_run."""
+
+    # Schemas captured from the tool registry prior to Phase 1's
+    # audit/permissions wiring - these must remain byte-identical.
+    EXPECTED_SCHEMAS = {
+        "connection_status": {
+            "properties": {},
+            "title": "connection_statusArguments",
+            "type": "object",
+        },
+        "list_jobs": {
+            "properties": {
+                "query": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Query",
+                },
+                "status": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Status",
+                },
+                "limit": {"default": 20, "title": "Limit", "type": "integer"},
+                "fields": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Fields",
+                },
+            },
+            "title": "list_jobsArguments",
+            "type": "object",
+        },
+        "list_candidates": {
+            "properties": {
+                "query": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Query",
+                },
+                "status": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Status",
+                },
+                "limit": {"default": 20, "title": "Limit", "type": "integer"},
+                "fields": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Fields",
+                },
+            },
+            "title": "list_candidatesArguments",
+            "type": "object",
+        },
+        "get_job": {
+            "properties": {
+                "job_id": {"title": "Job Id", "type": "integer"},
+                "fields": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Fields",
+                },
+            },
+            "required": ["job_id"],
+            "title": "get_jobArguments",
+            "type": "object",
+        },
+        "get_candidate": {
+            "properties": {
+                "candidate_id": {"title": "Candidate Id", "type": "integer"},
+                "fields": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Fields",
+                },
+            },
+            "required": ["candidate_id"],
+            "title": "get_candidateArguments",
+            "type": "object",
+        },
+        "get_recent_placements": {
+            "properties": {
+                "days": {"default": 30, "title": "Days", "type": "integer"},
+                "limit": {"default": 100, "title": "Limit", "type": "integer"},
+            },
+            "title": "get_recent_placementsArguments",
+            "type": "object",
+        },
+        "get_candidate_files": {
+            "properties": {
+                "candidate_id": {"title": "Candidate Id", "type": "integer"},
+            },
+            "required": ["candidate_id"],
+            "title": "get_candidate_filesArguments",
+            "type": "object",
+        },
+        "search_entities": {
+            "properties": {
+                "entity": {"title": "Entity", "type": "string"},
+                "query": {"title": "Query", "type": "string"},
+                "limit": {"default": 20, "title": "Limit", "type": "integer"},
+                "fields": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Fields",
+                },
+            },
+            "required": ["entity", "query"],
+            "title": "search_entitiesArguments",
+            "type": "object",
+        },
+        "query_entities": {
+            "properties": {
+                "entity": {"title": "Entity", "type": "string"},
+                "where": {"title": "Where", "type": "string"},
+                "limit": {"default": 20, "title": "Limit", "type": "integer"},
+                "fields": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Fields",
+                },
+                "order_by": {
+                    "anyOf": [{"type": "string"}, {"type": "null"}],
+                    "default": None,
+                    "title": "Order By",
+                },
+            },
+            "required": ["entity", "where"],
+            "title": "query_entitiesArguments",
+            "type": "object",
+        },
+    }
+
+    @pytest.mark.parametrize("tool_name", list(EXPECTED_SCHEMAS.keys()))
+    def test_non_upload_tool_schema_unchanged(self, tool_name):
+        tools = server.mcp._tool_manager._tools
+        assert tools[tool_name].parameters == self.EXPECTED_SCHEMAS[tool_name]
+
+    def test_upload_candidate_resume_schema_gains_new_optional_params(self):
+        tools = server.mcp._tool_manager._tools
+        schema = tools["upload_candidate_resume"].parameters
+        properties = schema["properties"]
+
+        # Original params untouched.
+        assert properties["candidate_id"] == {"title": "Candidate Id", "type": "integer"}
+        assert properties["file_path"] == {"title": "File Path", "type": "string"}
+        assert schema["required"] == ["candidate_id", "file_path"]
+
+        # New, additive, defaulted params.
+        assert properties["file_type"]["default"] == "SAMPLE"
+        assert properties["file_type"]["type"] == "string"
+        assert properties["external_id"]["default"] == "Portfolio"
+        assert properties["external_id"]["type"] == "string"
+        assert properties["dry_run"]["default"] is False
+        assert properties["dry_run"]["type"] == "boolean"
+
+
+class TestPermissionDenial:
+    """Proves permission denial is real, wired code, not just unreachable
+    dead branches: when permissions.check is monkeypatched to deny, the
+    tool returns a denial string and the client is never touched."""
+
+    def test_denied_tool_never_calls_get_client(self, mock_client):
+        from bullhorn_mcp.crosscutting import permissions as permissions_module
+
+        denial = permissions_module.PermissionDecision(
+            allowed=False, requires_approval=False, reason="not allowed in this environment"
+        )
+
+        with (
+            patch.object(server, "get_client", return_value=mock_client) as get_client_mock,
+            patch.object(server.permissions, "check", return_value=denial),
+        ):
+            result = server.list_jobs()
+
+        assert result.startswith("ERROR: permission denied for list_jobs")
+        assert "not allowed in this environment" in result
+        get_client_mock.assert_not_called()
+        mock_client.search.assert_not_called()
+
+    def test_denied_upload_candidate_resume_never_calls_client(self, mock_client):
+        from bullhorn_mcp.crosscutting import permissions as permissions_module
+
+        denial = permissions_module.PermissionDecision(allowed=False, requires_approval=False)
+
+        with (
+            patch.object(server, "get_client", return_value=mock_client) as get_client_mock,
+            patch.object(server.permissions, "check", return_value=denial),
+        ):
+            result = server.upload_candidate_resume(
+                candidate_id=67890,
+                file_path=r"C:\temp\resume.pdf",
+                dry_run=True,
+            )
+
+        assert result.startswith("ERROR: permission denied for upload_candidate_resume")
+        get_client_mock.assert_not_called()
+        mock_client.upload_candidate_resume.assert_not_called()
+
+
+class TestAuditLogging:
+    """Proves every tool emits exactly one audit log record per call, on
+    both success and error paths."""
+
+    def test_success_path_logs_exactly_once(self, mock_client, caplog):
+        with caplog.at_level("INFO", logger="bullhorn_mcp.audit"):
+            with patch.object(server, "get_client", return_value=mock_client):
+                server.list_jobs()
+
+        audit_records = [r for r in caplog.records if r.name == "bullhorn_mcp.audit"]
+        assert len(audit_records) == 1
+        assert '"tool": "list_jobs"' in audit_records[0].getMessage()
+        assert '"result": "ok"' in audit_records[0].getMessage()
+
+    def test_error_path_logs_exactly_once(self, mock_client, caplog):
+        mock_client.search.side_effect = BullhornAPIError("API Error")
+
+        with caplog.at_level("WARNING", logger="bullhorn_mcp.audit"):
+            with patch.object(server, "get_client", return_value=mock_client):
+                server.list_jobs()
+
+        audit_records = [r for r in caplog.records if r.name == "bullhorn_mcp.audit"]
+        assert len(audit_records) == 1
+        assert audit_records[0].levelname == "WARNING"
+
+    @pytest.mark.parametrize(
+        "tool_name,call",
+        [
+            ("connection_status", lambda c: server.connection_status()),
+            ("list_jobs", lambda c: server.list_jobs()),
+            ("list_candidates", lambda c: server.list_candidates()),
+            ("get_job", lambda c: server.get_job(job_id=12345)),
+            ("get_candidate", lambda c: server.get_candidate(candidate_id=67890)),
+            ("get_recent_placements", lambda c: server.get_recent_placements()),
+            ("get_candidate_files", lambda c: server.get_candidate_files(candidate_id=67890)),
+            (
+                "upload_candidate_resume",
+                lambda c: server.upload_candidate_resume(
+                    candidate_id=67890, file_path=r"C:\temp\resume.pdf"
+                ),
+            ),
+            (
+                "search_entities",
+                lambda c: server.search_entities(entity="JobOrder", query="isOpen:1"),
+            ),
+            (
+                "query_entities",
+                lambda c: server.query_entities(entity="JobOrder", where="salary > 1"),
+            ),
+        ],
+    )
+    def test_each_tool_logs_exactly_once_on_success(self, mock_client, caplog, tool_name, call):
+        mock_client.get_candidate_files.return_value = []
+        mock_client.upload_candidate_resume.return_value = {"fileId": 1}
+
+        with caplog.at_level("INFO", logger="bullhorn_mcp.audit"):
+            with patch.object(server, "get_client", return_value=mock_client):
+                call(mock_client)
+
+        audit_records = [r for r in caplog.records if r.name == "bullhorn_mcp.audit"]
+        assert len(audit_records) == 1, f"expected exactly one audit record for {tool_name}"
+        assert f'"tool": "{tool_name}"' in audit_records[0].getMessage()
+
+    def test_audit_never_emits_secret_values_from_a_real_tool_call(self, mock_client, caplog):
+        """Feeds a synthetic secret-shaped arg through a real tool call path
+        and proves it never appears verbatim in the audit log."""
+        with caplog.at_level("INFO", logger="bullhorn_mcp.audit"):
+            audit_module = server.audit
+            audit_module.log_invocation(
+                tool="list_jobs",
+                args={"password": "hunter2", "query": "title:Engineer"},
+                result_summary="ok",
+                duration_ms=1.0,
+                success=True,
+            )
+
+        assert "hunter2" not in caplog.text

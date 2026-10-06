@@ -387,3 +387,131 @@ class TestEdgeCases:
 
         assert result["fileId"] == 222
         assert route.called
+
+    @respx.mock
+    def test_upload_candidate_resume_default_params_match_pre_phase1_wire_behavior(
+        self,
+        mock_auth,
+        mock_session,
+        tmp_path,
+    ):
+        """Calling with only candidate_id/file_path must send the exact same
+        HTTP params as before file_type/external_id existed."""
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"%PDF-1.4 fake resume")
+
+        route = respx.put(
+            f"{mock_session.rest_url}/file/Candidate/67890/raw"
+        ).mock(return_value=httpx.Response(200, json={"fileId": 1}))
+
+        client = BullhornClient(mock_auth)
+
+        client.upload_candidate_resume(
+            candidate_id=67890,
+            file_path=str(resume_file),
+        )
+
+        request_url = str(route.calls[0].request.url)
+        assert "externalID=Portfolio" in request_url
+        assert "fileType=SAMPLE" in request_url
+
+    @respx.mock
+    def test_upload_candidate_resume_custom_file_type_and_external_id(
+        self,
+        mock_auth,
+        mock_session,
+        tmp_path,
+    ):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"%PDF-1.4 fake resume")
+
+        route = respx.put(
+            f"{mock_session.rest_url}/file/Candidate/67890/raw"
+        ).mock(return_value=httpx.Response(200, json={"fileId": 1}))
+
+        client = BullhornClient(mock_auth)
+
+        client.upload_candidate_resume(
+            candidate_id=67890,
+            file_path=str(resume_file),
+            file_type="RESUME",
+            external_id="Website",
+        )
+
+        request_url = str(route.calls[0].request.url)
+        assert "externalID=Website" in request_url
+        assert "fileType=RESUME" in request_url
+
+    def test_upload_candidate_resume_invalid_candidate_id(self, mock_auth, tmp_path):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"content")
+
+        client = BullhornClient(mock_auth)
+
+        with pytest.raises(ValueError, match="candidate_id must be a positive integer"):
+            client.upload_candidate_resume(candidate_id=0, file_path=str(resume_file))
+
+    def test_upload_candidate_resume_missing_file(self, mock_auth):
+        client = BullhornClient(mock_auth)
+
+        with pytest.raises(ValueError, match="Resume file does not exist"):
+            client.upload_candidate_resume(
+                candidate_id=1, file_path=r"C:\does\not\exist.pdf"
+            )
+
+
+class TestDescribeResumeUpload:
+    """Tests for the read-only, network-free describe_resume_upload()."""
+
+    def test_describes_upload_without_network_call(self, mock_auth, tmp_path):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"%PDF-1.4 some bytes here")
+
+        client = BullhornClient(mock_auth)
+
+        with respx.mock:
+            # No routes registered - any network call would raise.
+            result = client.describe_resume_upload(
+                candidate_id=67890,
+                file_path=str(resume_file),
+            )
+
+        assert result["candidate_id"] == 67890
+        assert result["file_name"] == "resume.pdf"
+        assert result["file_size_bytes"] == len(b"%PDF-1.4 some bytes here")
+        assert result["content_type"] == "application/pdf"
+        assert result["file_type"] == "SAMPLE"
+        assert result["external_id"] == "Portfolio"
+
+    def test_describes_upload_with_custom_file_type_and_external_id(self, mock_auth, tmp_path):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"content")
+
+        client = BullhornClient(mock_auth)
+
+        result = client.describe_resume_upload(
+            candidate_id=1,
+            file_path=str(resume_file),
+            file_type="RESUME",
+            external_id="Website",
+        )
+
+        assert result["file_type"] == "RESUME"
+        assert result["external_id"] == "Website"
+
+    def test_raises_same_value_error_for_invalid_candidate_id(self, mock_auth, tmp_path):
+        resume_file = tmp_path / "resume.pdf"
+        resume_file.write_bytes(b"content")
+
+        client = BullhornClient(mock_auth)
+
+        with pytest.raises(ValueError, match="candidate_id must be a positive integer"):
+            client.describe_resume_upload(candidate_id=-1, file_path=str(resume_file))
+
+    def test_raises_same_value_error_for_missing_file(self, mock_auth):
+        client = BullhornClient(mock_auth)
+
+        with pytest.raises(ValueError, match="Resume file does not exist"):
+            client.describe_resume_upload(
+                candidate_id=1, file_path=r"C:\does\not\exist.pdf"
+            )

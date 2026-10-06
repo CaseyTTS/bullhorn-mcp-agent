@@ -2,11 +2,13 @@
 
 import json
 import os
+import time
 from mcp.server.fastmcp import FastMCP
 
 from .config import BullhornConfig
 from .auth import BullhornAuth, AuthenticationError
 from .client import BullhornClient, BullhornAPIError
+from .crosscutting import approval, audit, dryrun, permissions
 from datetime import datetime, timedelta, timezone
 
 # Initialize MCP server
@@ -33,9 +35,30 @@ def format_response(data: list | dict) -> str:
     """Format API response as readable JSON."""
     return json.dumps(data, indent=2, default=str)
 
+
+def _permission_denied_message(tool: str, decision: permissions.PermissionDecision) -> str:
+    """Build the denial string returned when a permission check disallows a call."""
+    reason = f": {decision.reason}" if decision.reason else ""
+    return f"ERROR: permission denied for {tool}{reason}"
+
+
 @mcp.tool()
 def connection_status() -> str:
     """Check whether Bullhorn API credentials are configured and connectivity is available."""
+    start_time = time.perf_counter()
+    args: dict = {}
+
+    decision = permissions.check("connection_status")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="connection_status",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("connection_status", decision)
 
     required_vars = [
         "BULLHORN_CLIENT_ID",
@@ -47,30 +70,57 @@ def connection_status() -> str:
     missing = [name for name in required_vars if not os.getenv(name)]
 
     if missing:
-        return format_response({
+        result = format_response({
             "configured": False,
             "connected": False,
             "message": "Bullhorn credentials have not been configured yet.",
             "missing_variables": missing,
         })
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="connection_status",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     try:
         client = get_client()
         session = client.auth.session
 
-        return format_response({
+        result = format_response({
             "configured": True,
             "connected": True,
             "message": "Successfully connected to Bullhorn.",
             "rest_url": session.rest_url,
         })
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="connection_status",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except Exception as e:
-        return format_response({
+        result = format_response({
             "configured": True,
             "connected": False,
             "message": f"Bullhorn connection failed: {e}",
         })
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="connection_status",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
@@ -97,6 +147,21 @@ def list_jobs(
         - list_jobs(query="title:Software AND employmentType:Direct Hire", limit=10)
         - list_jobs(status="Accepting Candidates")
     """
+    start_time = time.perf_counter()
+    args = {"query": query, "status": status, "limit": limit, "fields": fields}
+
+    decision = permissions.check("list_jobs")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="list_jobs",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("list_jobs", decision)
+
     try:
         client = get_client()
 
@@ -113,10 +178,28 @@ def list_jobs(
             sort="-dateAdded",
         )
 
-        return format_response(results)
+        result = format_response(results)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="list_jobs",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="list_jobs",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
@@ -143,6 +226,21 @@ def list_candidates(
         - list_candidates(query="lastName:Smith AND status:Active")
         - list_candidates(status="Active", limit=50)
     """
+    start_time = time.perf_counter()
+    args = {"query": query, "status": status, "limit": limit, "fields": fields}
+
+    decision = permissions.check("list_candidates")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="list_candidates",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("list_candidates", decision)
+
     try:
         client = get_client()
 
@@ -159,10 +257,28 @@ def list_candidates(
             sort="-dateAdded",
         )
 
-        return format_response(results)
+        result = format_response(results)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="list_candidates",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="list_candidates",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
@@ -176,13 +292,46 @@ def get_job(job_id: int, fields: str | None = None) -> str:
     Returns:
         JSON object with job details
     """
+    start_time = time.perf_counter()
+    args = {"job_id": job_id, "fields": fields}
+
+    decision = permissions.check("get_job")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_job",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("get_job", decision)
+
     try:
         client = get_client()
-        result = client.get(entity="JobOrder", entity_id=job_id, fields=fields)
-        return format_response(result)
+        result_data = client.get(entity="JobOrder", entity_id=job_id, fields=fields)
+        result = format_response(result_data)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_job",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_job",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
@@ -196,23 +345,89 @@ def get_candidate(candidate_id: int, fields: str | None = None) -> str:
     Returns:
         JSON object with candidate details
     """
+    start_time = time.perf_counter()
+    args = {"candidate_id": candidate_id, "fields": fields}
+
+    decision = permissions.check("get_candidate")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_candidate",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("get_candidate", decision)
+
     try:
         client = get_client()
-        result = client.get(entity="Candidate", entity_id=candidate_id, fields=fields)
-        return format_response(result)
+        result_data = client.get(entity="Candidate", entity_id=candidate_id, fields=fields)
+        result = format_response(result_data)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_candidate",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_candidate",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
 def get_recent_placements(days: int = 30, limit: int = 100) -> str:
     """Get recent Bullhorn placements from the last X days."""
+    start_time = time.perf_counter()
+    args = {"days": days, "limit": limit}
+
+    decision = permissions.check("get_recent_placements")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_recent_placements",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("get_recent_placements", decision)
+
     if days < 1 or days > 365:
-        return "ERROR: days must be between 1 and 365"
+        result = "ERROR: days must be between 1 and 365"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_recent_placements",
+            args=args,
+            result_summary=result,
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
     if limit < 1 or limit > 500:
-        return "ERROR: limit must be between 1 and 500"
+        result = "ERROR: limit must be between 1 and 500"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_recent_placements",
+            args=args,
+            result_summary=result,
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
     try:
         client = get_client()
@@ -228,36 +443,206 @@ def get_recent_placements(days: int = 30, limit: int = 100) -> str:
             order_by="-dateAdded",
         )
 
-        return format_response(results)
+        result = format_response(results)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_recent_placements",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_recent_placements",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
+
 
 @mcp.tool()
 def get_candidate_files(candidate_id: int) -> str:
     """List file attachments for a Bullhorn Candidate."""
+    start_time = time.perf_counter()
+    args = {"candidate_id": candidate_id}
+
+    decision = permissions.check("get_candidate_files")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_candidate_files",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("get_candidate_files", decision)
+
     try:
         client = get_client()
-        result = client.get_candidate_files(candidate_id)
-        return format_response(result)
+        result_data = client.get_candidate_files(candidate_id)
+        result = format_response(result_data)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_candidate_files",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError, ValueError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="get_candidate_files",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
-def upload_candidate_resume(candidate_id: int, file_path: str) -> str:
-    """Upload a local resume file to a Bullhorn Candidate."""
+def upload_candidate_resume(
+    candidate_id: int,
+    file_path: str,
+    file_type: str = "SAMPLE",
+    external_id: str = "Portfolio",
+    dry_run: bool = False,
+) -> str:
+    """Upload a local resume file to a Bullhorn Candidate.
+
+    Args:
+        candidate_id: The Candidate ID
+        file_path: Local filesystem path to the resume file
+        file_type: Bullhorn file type classification (default: "SAMPLE")
+        external_id: Bullhorn external ID for the file (default: "Portfolio")
+        dry_run: If True, validate inputs and return a preview of what would
+            be uploaded without performing the upload
+
+    Returns:
+        JSON object with the upload result, or - when dry_run is True - a
+        preview of what would have been uploaded.
+    """
+    start_time = time.perf_counter()
+    args = {
+        "candidate_id": candidate_id,
+        "file_path": file_path,
+        "file_type": file_type,
+        "external_id": external_id,
+        "dry_run": dry_run,
+    }
+
+    decision = permissions.check("upload_candidate_resume", operation="write")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="upload_candidate_resume",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("upload_candidate_resume", decision)
+
+    if dry_run:
+        try:
+            client = get_client()
+            preview_data = client.describe_resume_upload(
+                candidate_id=candidate_id,
+                file_path=file_path,
+                file_type=file_type,
+                external_id=external_id,
+            )
+            preview = dryrun.render_preview("upload_candidate_resume", preview_data)
+            result = format_response(preview)
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            audit.log_invocation(
+                tool="upload_candidate_resume",
+                args=args,
+                result_summary="dry_run_preview",
+                duration_ms=duration_ms,
+                success=True,
+            )
+            return result
+
+        except (AuthenticationError, BullhornAPIError, ValueError) as e:
+            result = f"ERROR: {e}"
+            duration_ms = (time.perf_counter() - start_time) * 1000
+            audit.log_invocation(
+                tool="upload_candidate_resume",
+                args=args,
+                result_summary=f"error: {e}",
+                duration_ms=duration_ms,
+                success=False,
+            )
+            return result
+
+    if decision.requires_approval:
+        token = approval.create_pending(
+            "upload_candidate_resume",
+            {
+                "candidate_id": candidate_id,
+                "file_path": file_path,
+                "file_type": file_type,
+                "external_id": external_id,
+            },
+        )
+        result = format_response({
+            "pending_approval": True,
+            "approval_token": token,
+            "message": "This operation requires approval before it will be executed.",
+        })
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="upload_candidate_resume",
+            args=args,
+            result_summary="pending_approval",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
+
     try:
         client = get_client()
-        result = client.upload_candidate_resume(
+        result_data = client.upload_candidate_resume(
             candidate_id=candidate_id,
             file_path=file_path,
+            file_type=file_type,
+            external_id=external_id,
         )
-        return format_response(result)
+        result = format_response(result_data)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="upload_candidate_resume",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError, ValueError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="upload_candidate_resume",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
@@ -283,6 +668,21 @@ def search_entities(
         - search_entities(entity="ClientCorporation", query="name:Acme*")
         - search_entities(entity="JobSubmission", query="jobOrder.id:12345")
     """
+    start_time = time.perf_counter()
+    args = {"entity": entity, "query": query, "limit": limit, "fields": fields}
+
+    decision = permissions.check("search_entities")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="search_entities",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("search_entities", decision)
+
     try:
         client = get_client()
 
@@ -293,10 +693,28 @@ def search_entities(
             count=limit,
         )
 
-        return format_response(results)
+        result = format_response(results)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="search_entities",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="search_entities",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 @mcp.tool()
@@ -323,6 +741,27 @@ def query_entities(
         - query_entities(entity="JobOrder", where="salary > 100000")
         - query_entities(entity="Candidate", where="status='Active'", order_by="-dateAdded")
     """
+    start_time = time.perf_counter()
+    args = {
+        "entity": entity,
+        "where": where,
+        "limit": limit,
+        "fields": fields,
+        "order_by": order_by,
+    }
+
+    decision = permissions.check("query_entities")
+    if not decision.allowed:
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="query_entities",
+            args=args,
+            result_summary="denied",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return _permission_denied_message("query_entities", decision)
+
     try:
         client = get_client()
 
@@ -334,10 +773,28 @@ def query_entities(
             order_by=order_by,
         )
 
-        return format_response(results)
+        result = format_response(results)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="query_entities",
+            args=args,
+            result_summary="ok",
+            duration_ms=duration_ms,
+            success=True,
+        )
+        return result
 
     except (AuthenticationError, BullhornAPIError) as e:
-        return f"ERROR: {e}"
+        result = f"ERROR: {e}"
+        duration_ms = (time.perf_counter() - start_time) * 1000
+        audit.log_invocation(
+            tool="query_entities",
+            args=args,
+            result_summary=f"error: {e}",
+            duration_ms=duration_ms,
+            success=False,
+        )
+        return result
 
 
 def main():
