@@ -1,9 +1,11 @@
 """Bullhorn OAuth 2.0 authentication handler."""
 
 import time
-import httpx
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import urlencode, urlparse, parse_qs
+
+import httpx
 
 from .config import BullhornConfig
 
@@ -41,7 +43,7 @@ class BullhornAuth:
         """Get current session, refreshing if needed."""
         if self._session is None or time.time() >= self._session.expires_at - 60:
             self._refresh_session()
-        return self._session
+        return cast(BullhornSession, self._session)
 
     def _refresh_session(self) -> None:
         """Refresh the API session."""

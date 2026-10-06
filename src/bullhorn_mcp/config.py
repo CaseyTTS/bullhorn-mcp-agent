@@ -2,6 +2,8 @@
 
 import os
 from dataclasses import dataclass
+from typing import cast
+
 from dotenv import load_dotenv
 
 
@@ -40,10 +42,10 @@ class BullhornConfig:
             raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
 
         return cls(
-            client_id=client_id,
-            client_secret=client_secret,
-            username=username,
-            password=password,
+            client_id=cast(str, client_id),
+            client_secret=cast(str, client_secret),
+            username=cast(str, username),
+            password=cast(str, password),
             auth_url=os.getenv("BULLHORN_AUTH_URL", "https://auth.bullhornstaffing.com"),
             login_url=os.getenv("BULLHORN_LOGIN_URL", "https://rest.bullhornstaffing.com"),
         )

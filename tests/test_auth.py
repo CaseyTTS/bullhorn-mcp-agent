@@ -406,6 +406,92 @@ class TestBullhornAuth:
         assert "Failed to get auth code" in str(exc_info.value)
 
     @respx.mock
+    def test_redirect_to_untrusted_domain_without_code(self, sample_config):
+        """Test that a redirect to a non-Bullhorn host with no code is not followed.
+
+        If the authorize endpoint redirects somewhere that isn't a
+        bullhornstaffing.com host and the redirect contains no auth code
+        (and no OAuth error), the loop must not follow it (the `else: break`
+        branch) and should raise AuthenticationError instead of chasing an
+        arbitrary redirect target.
+        """
+        respx.get(f"{sample_config.auth_url}/oauth/authorize").mock(
+            return_value=httpx.Response(
+                302,
+                headers={"location": "https://not-bullhorn.example.com/login"},
+            )
+        )
+
+        # If the (untrusted) redirect were followed, this route would be hit.
+        untrusted_route = respx.get("https://not-bullhorn.example.com/login").mock(
+            return_value=httpx.Response(
+                302,
+                headers={"location": "https://callback.example.com?code=should_not_be_used"},
+            )
+        )
+
+        auth = BullhornAuth(sample_config)
+
+        with pytest.raises(AuthenticationError) as exc_info:
+            _ = auth.session
+
+        assert "Failed to get auth code" in str(exc_info.value)
+        assert not untrusted_route.called
+
+    @respx.mock
+    def test_max_redirects_exhausted(self, sample_config):
+        """Test that exhausting max_redirects (5) without a terminal response raises.
+
+        If every hop is a redirect to a Bullhorn domain with no auth code
+        and no error, the loop runs out of attempts and falls through to
+        raise AuthenticationError based on the last response's status code.
+        """
+        respx.get(f"{sample_config.auth_url}/oauth/authorize").mock(
+            return_value=httpx.Response(
+                307,
+                headers={"location": "https://auth-hop1.bullhornstaffing.com/oauth/authorize"},
+            )
+        )
+        respx.get("https://auth-hop1.bullhornstaffing.com/oauth/authorize").mock(
+            return_value=httpx.Response(
+                307,
+                headers={"location": "https://auth-hop2.bullhornstaffing.com/oauth/authorize"},
+            )
+        )
+        respx.get("https://auth-hop2.bullhornstaffing.com/oauth/authorize").mock(
+            return_value=httpx.Response(
+                307,
+                headers={"location": "https://auth-hop3.bullhornstaffing.com/oauth/authorize"},
+            )
+        )
+        respx.get("https://auth-hop3.bullhornstaffing.com/oauth/authorize").mock(
+            return_value=httpx.Response(
+                307,
+                headers={"location": "https://auth-hop4.bullhornstaffing.com/oauth/authorize"},
+            )
+        )
+        respx.get("https://auth-hop4.bullhornstaffing.com/oauth/authorize").mock(
+            return_value=httpx.Response(
+                307,
+                headers={"location": "https://auth-hop5.bullhornstaffing.com/oauth/authorize"},
+            )
+        )
+        respx.get("https://auth-hop5.bullhornstaffing.com/oauth/authorize").mock(
+            return_value=httpx.Response(
+                307,
+                headers={"location": "https://auth-hop6.bullhornstaffing.com/oauth/authorize"},
+            )
+        )
+
+        auth = BullhornAuth(sample_config)
+
+        with pytest.raises(AuthenticationError) as exc_info:
+            _ = auth.session
+
+        assert "Failed to get auth code" in str(exc_info.value)
+        assert "307" in str(exc_info.value)
+
+    @respx.mock
     def test_rest_login_missing_token(self, sample_config):
         """Test error when REST login returns incomplete data."""
         respx.get(f"{sample_config.auth_url}/oauth/authorize").mock(

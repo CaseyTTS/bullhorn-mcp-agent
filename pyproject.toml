@@ -11,10 +11,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [name = "bullhorn-mcp-agent"
+dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "respx>=0.21.0",
+    "ruff>=0.6.0",
+    "mypy>=1.10.0",
 ]
 
 [project.scripts]
@@ -30,3 +32,23 @@ packages = ["src/bullhorn_mcp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 140
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+# Pre-existing unused imports in test fixture/helper modules that are out of
+# scope for this phase (see docs/process/BUILDER.md Phase 0 work package).
+[tool.ruff.lint.per-file-ignores]
+"tests/conftest.py" = ["F401"]
+"tests/test_client.py" = ["F401"]
+"tests/test_config.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true

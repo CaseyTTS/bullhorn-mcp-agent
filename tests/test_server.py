@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from bullhorn_mcp import server
 from bullhorn_mcp.auth import AuthenticationError
@@ -278,6 +279,155 @@ class TestCandidateFiles:
             candidate_id=67890,
             file_path=r"C:\temp\resume.pdf",
         )
+
+class TestConnectionStatus:
+    """Tests for connection_status tool."""
+
+    REQUIRED_VARS = [
+        "BULLHORN_CLIENT_ID",
+        "BULLHORN_CLIENT_SECRET",
+        "BULLHORN_USERNAME",
+        "BULLHORN_PASSWORD",
+    ]
+
+    def test_all_required_vars_missing(self, monkeypatch):
+        """When no required env vars are set, status reports not configured."""
+        for name in self.REQUIRED_VARS:
+            monkeypatch.delenv(name, raising=False)
+
+        result = server.connection_status()
+        data = json.loads(result)
+
+        assert data["configured"] is False
+        assert data["connected"] is False
+        assert sorted(data["missing_variables"]) == sorted(self.REQUIRED_VARS)
+
+    def test_some_required_vars_missing(self, monkeypatch):
+        """When only some required env vars are set, missing_variables lists exactly the gaps."""
+        monkeypatch.setenv("BULLHORN_CLIENT_ID", "id123")
+        monkeypatch.setenv("BULLHORN_USERNAME", "user123")
+        monkeypatch.delenv("BULLHORN_CLIENT_SECRET", raising=False)
+        monkeypatch.delenv("BULLHORN_PASSWORD", raising=False)
+
+        result = server.connection_status()
+        data = json.loads(result)
+
+        assert data["configured"] is False
+        assert data["connected"] is False
+        assert sorted(data["missing_variables"]) == sorted(
+            ["BULLHORN_CLIENT_SECRET", "BULLHORN_PASSWORD"]
+        )
+
+    def test_all_vars_present_connection_succeeds(self, monkeypatch):
+        """When all required env vars are set and the client connects, report success."""
+        for name in self.REQUIRED_VARS:
+            monkeypatch.setenv(name, "value")
+
+        mock_session = Mock()
+        mock_session.rest_url = "https://rest99.bullhornstaffing.com/rest-services/abc/"
+
+        mock_client = Mock()
+        mock_client.auth.session = mock_session
+
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.connection_status()
+
+        data = json.loads(result)
+
+        assert data["configured"] is True
+        assert data["connected"] is True
+        assert data["rest_url"] == "https://rest99.bullhornstaffing.com/rest-services/abc/"
+
+    def test_all_vars_present_connection_fails(self, monkeypatch):
+        """When all required env vars are set but connecting raises, report failure with message."""
+        for name in self.REQUIRED_VARS:
+            monkeypatch.setenv(name, "value")
+
+        with patch.object(
+            server, "get_client", side_effect=Exception("boom: connection refused")
+        ):
+            result = server.connection_status()
+
+        data = json.loads(result)
+
+        assert data["configured"] is True
+        assert data["connected"] is False
+        assert "boom: connection refused" in data["message"]
+
+
+class TestGetRecentPlacements:
+    """Tests for get_recent_placements tool."""
+
+    def test_days_too_low(self, mock_client):
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.get_recent_placements(days=0)
+
+        assert result == "ERROR: days must be between 1 and 365"
+        mock_client.query.assert_not_called()
+
+    def test_days_too_high(self, mock_client):
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.get_recent_placements(days=366)
+
+        assert result == "ERROR: days must be between 1 and 365"
+        mock_client.query.assert_not_called()
+
+    def test_limit_too_low(self, mock_client):
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.get_recent_placements(limit=0)
+
+        assert result == "ERROR: limit must be between 1 and 500"
+        mock_client.query.assert_not_called()
+
+    def test_limit_too_high(self, mock_client):
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.get_recent_placements(limit=501)
+
+        assert result == "ERROR: limit must be between 1 and 500"
+        mock_client.query.assert_not_called()
+
+    def test_valid_inputs_calls_client_query(self, mock_client):
+        days = 30
+        limit = 50
+
+        before = datetime.now(timezone.utc) - timedelta(days=days)
+        before_ms = int(before.timestamp() * 1000)
+
+        with patch.object(server, "get_client", return_value=mock_client):
+            server.get_recent_placements(days=days, limit=limit)
+
+        after = datetime.now(timezone.utc) - timedelta(days=days)
+        after_ms = int(after.timestamp() * 1000)
+
+        mock_client.query.assert_called_once()
+        call_kwargs = mock_client.query.call_args.kwargs
+
+        assert call_kwargs["entity"] == "Placement"
+        assert call_kwargs["fields"] is None
+        assert call_kwargs["count"] == limit
+        assert call_kwargs["order_by"] == "-dateAdded"
+
+        where = call_kwargs["where"]
+        assert where.startswith("dateAdded >= ")
+        cutoff_ms = int(where.split(">=")[1].strip())
+        assert before_ms <= cutoff_ms <= after_ms
+
+    def test_auth_error_handling(self, mock_client):
+        mock_client.query.side_effect = AuthenticationError("Auth failed")
+
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.get_recent_placements()
+
+        assert result == "ERROR: Auth failed"
+
+    def test_api_error_handling(self, mock_client):
+        mock_client.query.side_effect = BullhornAPIError("API Error")
+
+        with patch.object(server, "get_client", return_value=mock_client):
+            result = server.get_recent_placements()
+
+        assert result == "ERROR: API Error"
+
 
 class TestMCPServerSetup:
     """Tests for MCP server configuration."""
