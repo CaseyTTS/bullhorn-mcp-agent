@@ -6,7 +6,7 @@
 - **Architecture plan:** `enter-planning-mode-only-binary-cherny.md` (the user's plan directory).
 - **Phase numbers** follow the user-fixed `docs/architecture/ROADMAP.md` revision 3: 4A, 4B, 5, 6, 7, 8, 9 (ROADMAP-AMENDMENT-4). Every item's target was re-checked against that revision on 2026-10-06.
 - **Phase 4A close-out (2026-10-06).** Closures and re-targets are recorded in the section "Phase 4A close-out" near the end of this file. Where an item below names an older target, that section supersedes it.
-- **Phase 5 close-out (2026-10-07).** The section "Phase 5 close-out: open debt by target", at the end of this file, is the authoritative current summary. It supersedes the per-item targets and statuses above it.
+- **Phase 5 close-out (2026-10-07).** The section "Phase 5 close-out: open debt by target" is the authoritative summary as of Phase 5. It is updated by "Phase 6 M1 close-out" at the end of this file, which is the current authoritative summary.
 
 **Status values:**
 
@@ -986,11 +986,11 @@ The triage is in `PHASE5B_WORK_PACKAGE.md`, "5B Review Triage".
 
 ---
 
-## Phase 5 close-out: open debt by target (2026-10-07; authoritative summary)
+## Phase 5 close-out: open debt by target (2026-10-07)
 
 **Status.** Phase 5 (5B, 5A, 5C) is **COMPLETE: READY FOR COMMIT/PUSH**. Phase 6 has not started.
 
-**Authority.** This table supersedes all earlier per-item targets.
+**Authority.** Superseded by "Phase 6 M1 close-out" below.
 
 | Target | Count | Items |
 |---|---|---|
@@ -1001,3 +1001,55 @@ The triage is in `PHASE5B_WORK_PACKAGE.md`, "5B Review Triage".
 | **Pre-production / external gates** | 2 | P5A-7 (before the EXT-2 verification run), P5A-16 (the pre-production gate, covering P5A-10..14, P5C-2, P5C-3 and P5C-16). Re-assessing P5B-1 / P5B-14 is also a precondition for EXT-1. |
 | **Waiting on an HV item (fails closed meanwhile)** | 4 | NB-15 (real payloads), RAG-5 / OWG-8 (HV-Q10), P4B-5 (HV-Q4) |
 | **Total open** | **67** | |
+
+---
+
+## Phase 6 M1 close-out (2026-10-07)
+
+**Basis.** The Independent Reviewer and the Security & Identity Reviewer both returned PASS, with no blocking findings. Sec NB-1 (open-period differencing) was promoted to blocking and fixed by `PHASE6_M1_WORK_PACKAGE.md` Amendment M1-B. Details are in `PHASE6_M1_WORK_PACKAGE.md` (M1-A, M1-B).
+
+**Closed by M1:**
+- **P5C-1.** The Tier 2 path calls the 5C internal services directly under the service identity. `SERVICE_READ_TOOLS` is intentionally unchanged.
+
+| ID | Source | Finding | Target | Status |
+|---|---|---|---|---|
+| P6-1 | M1-A2 | `set_setting` cannot set integer settings (`changes.py` `SETTING_CHOICES` and the `isinstance(value, str)` assertion). `tier2_min_cohort` is settable only through admin-gated import. | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-2 | M1-A2 | `Settings.tier2_min_cohort` is typed `Any`. It is validated at runtime; mypy is blocked by the frozen `changes.py:344`. | Phase 6, next milestone (with P6-1) | OPEN-SCHEDULED |
+| P6-3 | M1-B residual | A closed Tier 2 period can still change through backdated records or deletes in Bullhorn. This is a narrow differencing channel. | Phase 6, analytics-store milestone (snapshot or frozen closed cells) | OPEN-SCHEDULED |
+| P6-4 | Sec NB-2 | There is no per-tenant cap on the service-identity read load: N Tier 2 users can drive about 2N concurrent service reads. | Phase 6, next milestone. Also added to the P5A-16 pre-production gate. | OPEN-SCHEDULED |
+| P6-5 | Sec NB-3 | A logged-out or restricted Bullhorn user becomes `workspace_only` and receives tenant-wide **suppressed** aggregates. This is **accepted explicitly**, per REQ §8.1: Tier 2 is defined by workspace identity, and receives only de-identified aggregates. | — | CLOSED (accepted) |
+| P6-6 | Sec NB-4 | A requirement string containing spaces makes the Tier 2 response fail the allowlist (`policy_violation`). This is an availability issue only; it fails closed. | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-7 | Ind NB-2 | Tier 1 drops the warnings from `get_activity`. | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-8 | Ind NB-3 | Tier 2 maps non-`ok` outcomes to the `setup_required` label. The label is inaccurate, but nothing leaks. | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-9 | Ind NB-4 | `validate_output` accepts NaN or Inf ratios. Unreachable today. | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-10 | Ind NB-5 | `audit_args` runs before the `try` block in `tools/metrics.py`. | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-11 | Ind NB-8 | The SM-7 resource-exhaustion assertion is loose. | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-12 | M1-B Sec NB | Tier 2 still fetches open months; an incomplete/unavailable open month can change a metric's overall `status` (reveals no number). Exclude open months from status computation. | Phase 6, next milestone | OPEN-SCHEDULED |
+
+### Analytics pipeline recommendations, and the open user decision Q-P1
+
+**The recommendations.** `docs/architecture/ANALYTICS_PIPELINE_RECOMMENDATIONS.md` (Analytics / Data Pipeline Agent, 2026-10-07) is advice to the Architect, and is recorded here as an input:
+- M1 stays live-only.
+- A later store holds only derived canonical events produced by the MCP's own reader and derivers.
+- Backfill uses small, closed `dateAdded` windows.
+- There is no dlt in the first store slice.
+- Tier 2 reads only through an aggregate view layer.
+
+**Q-P1 (open; a decision for the user is required before any analytics-store milestone).** A store built under the **service identity** would contain records that some Tier 1 users cannot see in Bullhorn. If Tier 1 metrics were served from that store, a Tier 1 user could receive aggregates beyond their own Bullhorn permissions. The user must decide one of these:
+- (a) Tier 1 metrics stay live, under the caller's session;
+- (b) Tier 1 aggregates from the store are permitted, and the policy says so;
+- (c) the store is partitioned or filtered by Bullhorn visibility, which requires HV.
+
+Until the user decides, the binding default is **(a)**, as in M1.
+
+### Updated open debt by target (authoritative; supersedes the Phase 5 table)
+
+| Target | Count | Items |
+|---|---|---|
+| **Phase 6** | 17 | RAG-4, P5C-9, P5C-10, P5C-11, P5C-12, P5C-13, P6-1, P6-2, P6-3, P6-4, P6-6, P6-7, P6-8, P6-9, P6-10, P6-11, P6-12 |
+| **Phase 7** | 19 | Unchanged from the Phase 5 table |
+| **Phase 8** | 0 separate | Unchanged |
+| **Phase 9** | 35 | Unchanged from the Phase 5 table |
+| **Pre-production / external gates** | 2 | P5A-7; P5A-16, which now also covers P6-4 |
+| **Waiting on an HV item** | 4 | Unchanged |
+| **Total open** | **76** | |

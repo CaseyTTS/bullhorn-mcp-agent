@@ -37,7 +37,7 @@ from . import deploy
 from .roles import principal_key_for
 
 TIERS = ("bullhorn_user", "workspace_only", "service", "local")
-TIER2_ALLOWLIST = frozenset({"bullhorn_session", "setup_status"})  # A2-2; Phase 6 adds get_recruiting_metrics
+TIER2_ALLOWLIST = frozenset({"bullhorn_session", "setup_status", "get_recruiting_metrics"})  # A2-2; Phase 6 M1 (D-5-24)
 HV_C5_VERIFIED = False  # no documented current-user CorporateUser id (PHASE5A_HV_VERIFICATION.md, HV-C5)
 MAX_DISPLAY_CHARS = 120
 _SAFE_DISPLAY_RE = re.compile(r"[^\w .@+\-'()]", re.UNICODE)

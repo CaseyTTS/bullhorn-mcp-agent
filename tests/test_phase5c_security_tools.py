@@ -50,6 +50,7 @@ ALL_22 = {
     "find_records",
     "get_activity",
 }
+PHASE6_TOOLS = {"get_recruiting_metrics"}  # Phase 6 M1
 FIND_SCHEMA = {
     "properties": {
         "entity": {"title": "Entity", "type": "string"},
@@ -118,8 +119,8 @@ SENTINEL_EMAIL = "zq.sentinel@example.test"
 
 class TestSurface:
     def test_exactly_22_tools(self):
-        assert set(server.mcp._tool_manager._tools) == ALL_22
-        assert len(server.mcp._tool_manager._tools) == 22
+        assert set(server.mcp._tool_manager._tools) == ALL_22 | PHASE6_TOOLS
+        assert len(server.mcp._tool_manager._tools) == 22 + len(PHASE6_TOOLS)
 
     def test_schema_pins(self):
         assert server.mcp._tool_manager._tools["find_records"].parameters == FIND_SCHEMA
@@ -211,7 +212,7 @@ class TestTierGating:
         from .test_phase5a_security_tools import NON_ALLOWLISTED
 
         calls = {**NON_ALLOWLISTED, "find_records": _find, "get_activity": _activity}
-        assert set(calls) | TIER2_ALLOWLIST == ALL_22
+        assert set(calls) | TIER2_ALLOWLIST == ALL_22 | PHASE6_TOOLS
         with patch.object(sessions, "service_client", side_effect=AssertionError("service fallback")), caller(ALICE):
             for name, call in calls.items():
                 assert call() == f"ERROR: permission denied for {name}: bullhorn_auth_required", name

@@ -25,7 +25,7 @@ ALL_TOOLS = {
     "manage_mapping_profile",
     "get_notes", "create_note", "confirm_write",
 }
-APPROVED_ADDITIVE_TOOLS = {"bullhorn_session", "find_records", "get_activity"}  # Phase 5 approved additive tools (D-5-15)
+APPROVED_ADDITIVE_TOOLS = {"bullhorn_session", "find_records", "get_activity", "get_recruiting_metrics"}  # Phase 5/6 approved additive tools (D-5-15)  # noqa: E501
 _INT_OR_NULL = {"anyOf": [{"type": "integer"}, {"type": "null"}], "default": None}
 _STR_OR_NULL = {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}
 NEW_SCHEMAS = {

@@ -1,0 +1,32 @@
+# Phase 6 M1 metric catalog (PHASE6_M1_WORK_PACKAGE.md §2). Packaged resource; version 1.
+# Counts reuse the 5C activity concepts (activity_concepts.yaml, activity/derivers.py); nothing is redefined here.
+# A period ratio divides two count metrics within the same period.
+version: 1
+metrics:
+  - id: jobs_created
+    kind: count
+    concept: job_created
+  - id: client_submissions
+    kind: count
+    concept: client_submission
+  - id: interviews_scheduled
+    kind: count
+    concept: interview_scheduled
+  - id: offers_extended
+    kind: count
+    concept: offer_extended
+  - id: placements_created
+    kind: count
+    concept: placement_created
+  - id: submission_to_interview
+    kind: ratio
+    numerator: interviews_scheduled
+    denominator: client_submissions
+  - id: interview_to_offer
+    kind: ratio
+    numerator: offers_extended
+    denominator: interviews_scheduled
+  - id: offer_to_placement
+    kind: ratio
+    numerator: placements_created
+    denominator: offers_extended

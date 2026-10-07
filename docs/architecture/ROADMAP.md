@@ -8,7 +8,7 @@
 | **Shared vocabulary** | `CANONICAL_ACTIVITY_VOCABULARY.md` is the single definition of the activity concepts and of the operation→concept mapping. |
 | **Base** | Plan `enter-planning-mode-only-binary-cherny.md` §8, amended by ROADMAP-AMENDMENT-1..4 (`DEFERRED_DEBT.md`) and the approved Phase 5 amendments PA-1..PA-6. |
 | **Precedence** | This file supersedes the phase numbering of plan §8 and of earlier roadmap revisions. All plan §8 scope commitments are preserved. Completed phases are not deconstructed. |
-| **Current state** | **Phase 5 (5B, 5A, 5C) is COMPLETE and READY FOR COMMIT/PUSH** (2026-10-07). Phase 6 is **NOT** started. There are **22** public tools. |
+| **Current state** | **Phase 5 COMPLETE.** **Phase 6 M1 COMPLETE** (2026-10-07; both reviews PASS, plus the M1-B fix and its re-check). The public tool count is **23**. The next Phase 6 slices are listed in §3. |
 
 ## Standing rules
 
@@ -22,8 +22,8 @@
 
   Any phase touching auth, authorization, sessions, identity, tenant isolation, service accounts, secrets or redirects, or consequential writes needs **both** reviewers to PASS (`docs/process/SECURITY_REVIEWER.md`).
 - **Shippable phases.** Every phase is independently shippable.
-- **Sub-phases.** The Architect may split a phase into lettered sub-phases. Ownership stays with the parent number.
-- **Scope freeze (D-5-25).** Within a phase, only findings that make approved behaviour correct, safe, consistent or regression-protected are fixed. Everything else is deferred.
+- **Sub-phases.** The Architect may split a phase into lettered sub-phases or milestones. Ownership stays with the parent number.
+- **Scope freeze (D-5-25).** Within a phase or milestone, only findings that make approved behaviour correct, safe, consistent or regression-protected are fixed. Everything else is deferred.
 
 ## Binding constraints
 
@@ -94,10 +94,10 @@
 | 7 | Generalized safe-write infrastructure | **7** | 4B |
 | 8 | Write-specific permissions | **4B** (`note.create`) | 7 |
 | 9 | Duplicate / idempotency safeguards | **4B** | 7, 8 |
-| 10 | Aggregation / metrics, including the **Tier 2** de-identified interface | **6** (single `get_recruiting_metrics`, D-5-5, D-5-24) | |
+| 10 | Aggregation / metrics, including the **Tier 2** de-identified interface | **6** (single `get_recruiting_metrics`; **M1 done**) | |
 | 11 | Dashboard-agent consumption | **6** | |
 | 12 | **Per-user Bullhorn auth / sessions / identity**, including the `access_tier` hook | **5A** (done) | 9 (re-running the security matrices) |
-| 13 | **Two-tier gating of record-level tools** (D-5-24) | **5C** (done) | 5A (hook), 6 (Tier 2 metrics) |
+| 13 | **Two-tier gating of record-level tools** (D-5-24) | **5C** (done) | 5A (hook), 6 (Tier 2 metrics; M1 done) |
 
 ### 1.2 Placement of other committed capabilities
 
@@ -136,9 +136,10 @@
 | 4B | Notes / Activity Core | COMPLETE (2026-10-07) | 19 |
 | **5B** | Note-Action Setup Completion | **COMPLETE** (both reviews PASS, 2026-10-07) | 19 |
 | **5A** | Identity & Sessions | **COMPLETE** (both re-reviews PASS, 2026-10-07) | 20 (+`bullhorn_session`) |
-| **5C** | Expanded Recruiting Reads + Streamlining + two-tier gating | **COMPLETE** (Round 2 re-reviews PASS, 2026-10-07) | **22** (+`find_records`, `get_activity`) |
-| **Phase 5 overall** | 5B + 5A + 5C | **COMPLETE — READY FOR COMMIT/PUSH.** There are no commits yet; per D-5-22, nothing is committed until all of Phase 5 passes. | **22** |
-| 6 | Analytics / Activity Timeline, including the **Tier 2** interface | **NOT started** | 23 (+`get_recruiting_metrics`) |
+| **5C** | Expanded Recruiting Reads + Streamlining + two-tier gating | **COMPLETE** (Round 2 re-reviews PASS, 2026-10-07) | 22 (+`find_records`, `get_activity`) |
+| **Phase 5 overall** | 5B + 5A + 5C | **COMPLETE** | 22 |
+| **6 — M1** | `get_recruiting_metrics`: period counts and stage ratios, two-tier, live Bullhorn | **COMPLETE** (both reviews PASS; M1-B closed-periods fix), 2026-10-07. Work package: `PHASE6_M1_WORK_PACKAGE.md` | **23** (+`get_recruiting_metrics`) |
+| 6 — next milestones | See §3 | Not started | 23 (no new tools planned) |
 | 7 | Broader Writes | | |
 | 8 | Bulk Resume | | |
 | 9 | Auth / Security Closeout | | |
@@ -151,51 +152,39 @@
 
 See `PHASE4A_WORK_PACKAGE.md` and `PHASE4B_WORK_PACKAGE.md`.
 
-### Phase 5B: Note-Action Setup Completion (COMPLETE)
+### Phase 5B, 5A and 5C (COMPLETE)
 
-See `PHASE5B_WORK_PACKAGE.md`.
+See `PHASE5B_WORK_PACKAGE.md`, `PHASE5A_WORK_PACKAGE.md` and `PHASE5C_WORK_PACKAGE.md`, including their amendments and triages.
 
-### Phase 5A: Identity & Sessions (COMPLETE)
+### Phase 6: Analytics / Activity Timeline (PA-5 and D-5-24 applied)
 
-See `PHASE5A_WORK_PACKAGE.md`: Amendments A1–A4, the triage, and the close-out.
+**M1 (COMPLETE).** `get_recruiting_metrics` with:
+- a fixed metric catalog of 5 counts and 3 within-period ratios;
+- month and quarter periods;
+- no dimensions.
 
-**Delivered:**
-- The shared HTTP server.
-- Per-request identity, with the tenant selected by a claim in the verified token.
-- The Bullhorn OAuth authorization-code flow through the service's HTTPS callback.
-- Two-step account linking.
-- A per-link execution identity.
-- An encrypted session store (OBS-1 closed).
-- The trusted-origin policy (DEBT-1 closed).
-- Per-tenant roles.
-- The `access_tier` hook, with deny-by-default for Tier 2.
-- The `create_note` verification procedure (EXT-1) and the SSO enablement procedure (EXT-2).
+The tiers:
+- **Tier 1** gets exact values under the caller's own session.
+- **Tier 2** is computed under the service identity through the 5C internal services. It gets closed periods only, aligned cells, no margins, `k`-suppression (default 10), the quarter rule, and an exact output allowlist.
 
-### Phase 5C: Expanded Recruiting Reads + Streamlining + Tier Gating (COMPLETE)
+**Next milestones (not started; each needs its own work package).** The order follows `DEFERRED_DEBT.md` and `ANALYTICS_PIPELINE_RECOMMENDATIONS.md`:
 
-See `PHASE5C_WORK_PACKAGE.md`: Amendments C1–C5, the triage, and Round 2.
+1. **M2: hardening and settings.**
+   - P6-1 and P6-2 (`set_setting` for integer settings);
+   - P6-4 (a per-tenant cap on service-identity reads);
+   - P6-6..P6-11;
+   - the Phase 6 cleanups P5C-9..P5C-13.
+2. **M3: coarse dimensions for Tier 1.** Dimensions such as recruiter or priority, applied first to Tier 1.
+   - Tier 2 dimensions (geography, client segments with the dominance rule, rounding, and the query budget, Q-T1..T5) only after a separate user decision.
+3. **M4: analytics store** (only on measured need). It follows the pipeline recommendations: derived canonical events, small closed `dateAdded` backfill windows, no dlt in the first slice, and Tier 2 reading only through an aggregate view. It closes P6-3 by freezing snapshots of closed cells.
+   - **Prerequisite: the user's decision on Q-P1** (see `DEFERRED_DEBT.md`, "Phase 6 M1 close-out"). Until then, Tier 1 stays live under the caller's session.
+4. **Later:**
+   - the timeline as a `get_activity` scope;
+   - composites;
+   - the dashboard-agent contract;
+   - the OW-13 end-to-end test.
 
-**Delivered:**
-- `find_records` and `get_activity` over `/query` only, with a structured query builder.
-- Concept definitions taken only from tenant configuration, failing closed.
-- Offset paging, retries, `tzdata` and soft-delete exclusion.
-- Provenance (Tier 1).
-- Tier gating.
-- Log scrubbing, and keyed, principal-bound audit digests.
-
-### Phase 6: Analytics / Activity Timeline (PA-5 and D-5-24 applied) — NOT started
-
-- **Timeline:** a `get_activity` scope, not a separate tool.
-- **Metrics:** a **single** `get_recruiting_metrics(scope, filters, metrics[])` (funnel, recruiter/job/client/team metrics, priority grouping).
-- **Tier enforcement:**
-  - Tier 1 gets full metrics with drill-back.
-  - Tier 2 gets de-identified aggregates only, per `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8 (TT-3..TT-8).
-  - The Tier 2 service-identity computation calls the 5C internal services directly (P5C-1).
-- Composites.
-- The dashboard-agent contract.
-- The OW-13 end-to-end acceptance test.
-
-The Security & Identity Reviewer's two-tier attack list (§8.6) is blocking.
+The Security & Identity Reviewer's two-tier attack list (REQ §8.6) is blocking for every milestone.
 
 ### Phase 7: Broader Writes
 
@@ -214,23 +203,25 @@ Unchanged.
 
 - DEBT-2 (the `config/` package);
 - re-running the full auth-failure, injection, approval-bypass and **multi-user isolation** matrices;
-- logging, redaction and error-body hardening (see `DEFERRED_DEBT.md`, "Phase 5 close-out", for the 35 Phase 9 items);
+- logging, redaction and error-body hardening (see `DEFERRED_DEBT.md` for the 35 Phase 9 items);
 - the process retrospective;
 - the mypy ratchet and `ruff format` (P5C-14).
 
 ## 4. Deferred-debt targets
 
-`DEFERRED_DEBT.md`, section "Phase 5 close-out: open debt by target", is authoritative.
+`DEFERRED_DEBT.md`, section "Phase 6 M1 close-out: updated open debt by target", is authoritative.
 
 | Target | Open items |
 |---|---|
-| Phase 6 | 7 |
+| Phase 6 | 16 |
 | Phase 7 | 19 |
 | Phase 8 | 0 separate (only OWG-9's batch part, counted under Phase 7) |
 | Phase 9 | 35 |
-| Pre-production / external gates | 2 (P5A-7, P5A-16) |
+| Pre-production / external gates | 2 (P5A-7; P5A-16, which also covers P6-4) |
 | Waiting on an HV item (fails closed meanwhile) | 4 (NB-15, RAG-5, OWG-8, P4B-5) |
-| **Total** | **67** |
+| **Total** | **76** |
+
+**Open user decision:** **Q-P1**, whether Tier 1 aggregates may come from a store built under the service identity (`DEFERRED_DEBT.md`). It must be decided before M4.
 
 ## 5. External dependencies and the pre-production gate
 
@@ -258,7 +249,8 @@ Before the first production shared deployment, re-assess:
 - the redaction and DoS items P5A-10..P5A-14;
 - P5C-2 (logger children created later);
 - P5C-3 (the legacy audit records raw query text and path IDs);
-- P5C-16 (the cursor / audit key silently falling back to a per-process secret).
+- P5C-16 (the cursor / audit key silently falling back to a per-process secret);
+- P6-4 (the service-identity read load from Tier 2).
 
 Single-worker operation is enforced (5A L-5), and DEBUG logging is unsupported in shared mode.
 
@@ -281,5 +273,5 @@ Single-worker operation is enforced (5A L-5), and DEBUG logging is unsupported i
 | HV-Q6 (partial) | 5C | Whether `/query` returns soft-deleted rows | `include_deleted=true` returns `unsupported_filter`. The exclusion is query plus post-filter. A NULL `isDeleted` means "not deleted" (interpretation HV-Q6-I). |
 | HV-Q7 (partial) | 5C | `Retry-After` | Not parsed. Fixed backoff: base 1 s, cap 8 s, at most 2 retries, a 30 s budget. |
 | HV-Q9 (partial) | 5C | Appointment status, cancellation and reschedule fields; placement client and recruiter fields | `interview_rescheduled` returns `unsupported_concept`. `appointment.status`, `placement.client_corporation_id` and `placement.recruiter_id` are tenant-mapped only; when unmapped, the links are null and listed in `unresolved_links`. A recurring series is not expanded. |
-| HV-Q9b | 5C | Parent-appointment link for invitee copies | See `PHASE5C_HV_VERIFICATION.md`. If unresolved, every `interview_*` concept returns `unsupported_concept` (`invitee_copies_unresolved`). |
+| HV-Q9b | 5C | Parent-appointment link for invitee copies | See `PHASE5C_HV_VERIFICATION.md`. If unresolved, every `interview_*` concept returns `unsupported_concept` (`invitee_copies_unresolved`), and so do the M1 interview metrics. |
 | HV-Q10 | 5C | Status-history sources | `client_submission` is dated only by `submission_date_added`. `job_status_changed` / `candidate_status_changed` return `unsupported_concept`. RAG-5 / OWG-8 stay open. |

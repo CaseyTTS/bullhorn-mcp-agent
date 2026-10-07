@@ -80,6 +80,9 @@ SETTING_CHOICES: Mapping[str, tuple[str, ...]] = {
     "interview_completion_rule": ("mapped_state_only", "end_passed_not_cancelled"),
 }
 STATUS_HISTORY_VERIFIED = False  # HV-Q10
+# Phase 6 M1 (P-1): the Tier 2 minimum cohort ``k``; unset (None) means the policy default.
+_SETTINGS_KEYS = _SETTINGS_KEYS | {"tier2_min_cohort"}
+TIER2_MIN_COHORT_RANGE = (5, 1000)
 
 _CONCEPTS_RESOURCE = "activity_concepts.yaml"
 _NOTE_SEMANTICS_RESOURCE = "note_action_semantics.yaml"
@@ -292,6 +295,9 @@ class Settings:
     # Phase 5C (D-5C-15): unset (None) until an administrator sets them; emitted only when set.
     client_submission_dating: str | None = None
     interview_completion_rule: str | None = None
+    # Phase 6 M1: an int (5..1000) or None, emitted only when set; typed Any so the 5C
+    # ``replace(settings, **{name: str})`` in tenant/changes.py stays well-typed.
+    tier2_min_cohort: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"reporting_timezone": self.reporting_timezone}
@@ -299,6 +305,8 @@ class Settings:
             value = getattr(self, name)
             if value is not None:
                 out[name] = value
+        if self.tier2_min_cohort is not None:
+            out["tier2_min_cohort"] = self.tier2_min_cohort
         return out
 
 
@@ -918,7 +926,7 @@ def _parse_settings(raw: Any, errors: list[str]) -> Settings | None:
     except ValueError as exc:
         errors.append(f"settings.reporting_timezone: {truncate_text(str(exc))}")
         ok = False
-    extra: dict[str, str] = {}
+    extra: dict[str, Any] = {}
     for name in SETTING_CHOICES:
         if name not in raw:
             continue
@@ -928,7 +936,22 @@ def _parse_settings(raw: Any, errors: list[str]) -> Settings | None:
             ok = False
         else:
             extra[name] = raw[name]
+    if "tier2_min_cohort" in raw:
+        cohort_error = tier2_min_cohort_error(raw["tier2_min_cohort"])
+        if cohort_error is not None:
+            errors.append(f"settings.tier2_min_cohort: {cohort_error}")
+            ok = False
+        else:
+            extra["tier2_min_cohort"] = raw["tier2_min_cohort"]
     return Settings(reporting_timezone=tz, **extra) if ok else None
+
+
+def tier2_min_cohort_error(value: Any) -> str | None:
+    """Phase 6 M1 (P-1): an exact ``int`` from 5 to 1000 (``None`` when valid)."""
+    lo, hi = TIER2_MIN_COHORT_RANGE
+    if type(value) is not int or not lo <= value <= hi:
+        return f"must be an int from {lo} to {hi}"
+    return None
 
 
 def setting_value_error(name: str, value: Any) -> str | None:
@@ -957,6 +980,8 @@ def records_by_key(profile: TenantProfileV2 | None) -> Mapping[str, dict[str, An
         value = getattr(profile.settings, name)
         if value is not None:
             out[f"setting:{name}"] = {"value": value}
+    if profile.settings.tier2_min_cohort is not None:  # Phase 6 M1: only when set
+        out["setting:tier2_min_cohort"] = {"value": profile.settings.tier2_min_cohort}
     for rec in active_last(list(profile.field_mappings)):  # 5C triage L-2: the active record wins
         out[rec.key] = rec.content()
     for vrec in profile.value_mappings:

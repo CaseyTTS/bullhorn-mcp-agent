@@ -160,14 +160,20 @@ def validate(args: Mapping[str, Any], timezone_name: str) -> tuple[Filters | Non
     )
 
 
-def get_activity(ctx: ReadContext, args: Mapping[str, Any]) -> dict[str, Any]:
+def get_activity(
+    ctx: ReadContext, args: Mapping[str, Any], *, max_pages: int = MAX_PAGES, execution_tier: str | None = None
+) -> dict[str, Any]:
+    """``max_pages`` (Phase 6 M1): the per-concept page budget of one call; the tool always uses the default.
+    ``execution_tier`` (M1-A1): passed to ``check_setup``; ``"service"`` only from ``metrics/tier2.py``."""
     try:
-        return _get_activity(ctx, args)
+        return _get_activity(ctx, args, max_pages, execution_tier)
     except Outcome as out:
         return out.result
 
 
-def _get_activity(ctx: ReadContext, args: Mapping[str, Any]) -> dict[str, Any]:
+def _get_activity(
+    ctx: ReadContext, args: Mapping[str, Any], max_pages: int = MAX_PAGES, execution_tier: str | None = None
+) -> dict[str, Any]:
     load_tenant(ctx)
     flt, errors = validate(args, ctx.timezone)
     if flt is None:
@@ -186,7 +192,7 @@ def _get_activity(ctx: ReadContext, args: Mapping[str, Any]) -> dict[str, Any]:
         if mode != "activity" or not isinstance(pos, dict) or set(pos) != set(concepts):
             return rejected([Problem("invalid_cursor", "cursor", "invalid_cursor")])
         positions = pos
-    check_setup(ctx)
+    check_setup(ctx, execution_tier=execution_tier)
 
     blocks: dict[str, dict[str, Any]] = {}
     next_positions: dict[str, Any] = {}
@@ -199,7 +205,7 @@ def _get_activity(ctx: ReadContext, args: Mapping[str, Any]) -> dict[str, Any]:
             continue
         if not (isinstance(position, list) and len(position) == 2 and all(type(p) is int and p >= 0 for p in position)):
             return rejected([Problem("invalid_cursor", "cursor", "invalid_cursor")])
-        block, nxt, block_warnings = _concept(ctx, concept, flt, limit, position)
+        block, nxt, block_warnings = _concept(ctx, concept, flt, limit, position, max_pages)
         blocks[concept] = block
         next_positions[concept] = nxt
         warnings.extend(w for w in block_warnings if w not in warnings)
@@ -216,7 +222,9 @@ def _get_activity(ctx: ReadContext, args: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _concept(ctx: ReadContext, concept: str, flt: Filters, limit: int, position: list[int]) -> tuple[dict[str, Any], Any, list[str]]:
+def _concept(
+    ctx: ReadContext, concept: str, flt: Filters, limit: int, position: list[int], max_pages: int = MAX_PAGES
+) -> tuple[dict[str, Any], Any, list[str]]:
     """One concept block, its next position (``None`` when finished) and its warnings."""
     if concept in derivers.UNSUPPORTED_CONCEPTS:
         reason, hv = derivers.UNSUPPORTED_CONCEPTS[concept]
@@ -247,12 +255,13 @@ def _concept(ctx: ReadContext, concept: str, flt: Filters, limit: int, position:
     index, start = position
     truncated = False
     nxt: Any = None
-    pages_left = MAX_PAGES
+    pages_left = max_pages
     deleted = 0
     while index < len(plan.sources) and pages_left > 0:
         src = plan.sources[index]
+        want = limit - len(events)
         page = fetch(
-            ctx, src.ent, wheres[index], render_fields(src.fields()), start, limit - len(events),
+            ctx, src.ent, wheres[index], render_fields(src.fields()), start, want,
             derivers.keep_row(concept, src), pages_left,
         )
         pages_left -= page.requests
@@ -261,6 +270,9 @@ def _concept(ctx: ReadContext, concept: str, flt: Filters, limit: int, position:
             evt = derivers.event(ctx, concept, src, row)
             if evt is not None:
                 events.append(evt)
+        if page.truncated and len(page.rows) < want and pages_left > 0 and page.next_start is not None:
+            start = page.next_start  # fetch's own page cap (<= MAX_PAGES) with budget left: continue (max_pages > MAX_PAGES only)
+            continue
         if page.truncated:
             truncated = True
             nxt = [index, page.next_start]

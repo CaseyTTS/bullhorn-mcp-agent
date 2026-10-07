@@ -45,6 +45,7 @@ ALL_20 = {
     "manage_mapping_profile", "get_notes", "create_note", "confirm_write", "bullhorn_session",
 }
 PHASE5C_TOOLS = {"find_records", "get_activity"}  # 5C approved additive tools (Amendment C3)
+PHASE6_TOOLS = {"get_recruiting_metrics"}  # Phase 6 M1
 FORBIDDEN_PARAMS = {
     "actor", "user", "principal", "username", "password", "subject", "issuer", "tenant", "service", "identity",
     "token", "code", "tier", "access_tier",
@@ -93,8 +94,8 @@ def _text(result):
 
 class TestRegistry:
     def test_exactly_twenty_tools(self):
-        assert set(server.mcp._tool_manager._tools) == ALL_20 | PHASE5C_TOOLS
-        assert len(server.mcp._tool_manager._tools) == 20 + len(PHASE5C_TOOLS)
+        assert set(server.mcp._tool_manager._tools) == ALL_20 | PHASE5C_TOOLS | PHASE6_TOOLS
+        assert len(server.mcp._tool_manager._tools) == 20 + len(PHASE5C_TOOLS) + len(PHASE6_TOOLS)
 
     def test_bullhorn_session_schema_pin(self):
         assert server.mcp._tool_manager._tools["bullhorn_session"].parameters == {

@@ -185,12 +185,18 @@ def load_tenant(ctx: ReadContext) -> None:
         ctx.profile, ctx.states, ctx.snapshot = None, {}, None
 
 
-def check_setup(ctx: ReadContext) -> None:
-    """Setup state with the caller's own session ``rest_url`` (D-5C-6, D-5C-7). Raises ``Outcome``."""
+def check_setup(ctx: ReadContext, *, execution_tier: str | None = None) -> None:
+    """Setup state with the caller's own session ``rest_url`` (D-5C-6, D-5C-7). Raises ``Outcome``.
+
+    ``execution_tier`` (Phase 6 M1-A1): ``"service"`` only from ``metrics/tier2.py``; ``None`` is unchanged.
+    """
+    if execution_tier not in (None, "service"):
+        raise ValueError("execution_tier must be None or 'service'")
     if ctx.profile is None and ctx.snapshot is None:
         raise Outcome(status("setup_required", missing_requirements=["profile:active_version"]))
     fingerprint = rest_url_fingerprint(ctx.client.auth.session.rest_url)  # the caller's session; never returned
-    ctx.setup = compute_setup_state(ctx.env, ConnectionCheck(ok=True, rest_url_fingerprint=fingerprint), now=ctx.now)
+    ctx.setup = compute_setup_state(ctx.env, ConnectionCheck(ok=True, rest_url_fingerprint=fingerprint), now=ctx.now,
+                                   execution_tier=execution_tier)
     if (
         ctx.profile is not None
         and ctx.profile.rest_url_fingerprint is not None

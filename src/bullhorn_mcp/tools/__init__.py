@@ -9,3 +9,4 @@ from . import setup  # noqa: F401
 from . import notes  # noqa: F401
 from . import session  # noqa: F401
 from . import records  # noqa: F401
+from . import metrics  # noqa: F401

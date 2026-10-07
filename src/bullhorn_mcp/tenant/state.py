@@ -123,13 +123,16 @@ def effective_states(profile: TenantProfileV2, discovery_doc: Mapping[str, Any] 
     return states, None
 
 
-def _shared_row1() -> list[str] | None:
+def _shared_row1(execution_tier: str | None = None) -> list[str] | None:
     """``None`` in local mode. Shared mode (A3-2): row 1 holds only for a ``bullhorn_user``
-    or ``service`` caller; the credential environment variables are ignored."""
+    or ``service`` caller; the credential environment variables are ignored.
+    ``execution_tier="service"`` (Phase 6 M1-A1): row 1 is held by the resolved service session."""
     from ..identity import deploy
 
     if not deploy.is_shared():
         return None
+    if execution_tier == "service":
+        return []
     from ..identity.principal import current_tier, has_bullhorn_access
 
     return [] if has_bullhorn_access(current_tier()) else ["bullhorn_session"]
@@ -140,15 +143,22 @@ def compute_setup_state(
     connection: ConnectionCheck | None = None,
     catalog_fingerprint: str | None = None,
     now: _dt.datetime | None = None,
+    *,
+    execution_tier: str | None = None,
 ) -> SetupState:
-    """Compute the setup state. Never raises for store/profile problems (they become states)."""
+    """Compute the setup state. Never raises for store/profile problems (they become states).
+
+    ``execution_tier`` (Phase 6 M1-A1): ``None`` (the caller's tier) or ``"service"``; anything else is a ``ValueError``.
+    """
+    if execution_tier not in (None, "service"):
+        raise ValueError("execution_tier must be None or 'service'")
     env = os.environ if env is None else env
     catalog_fingerprint = catalog_fingerprint or current_catalog_fingerprint()
     now = now or utc_now()
     checked = connection is not None
 
     # Row 1 (Amendment A3-2: in shared mode the caller's session, not the environment)
-    shared_missing = _shared_row1()
+    shared_missing = _shared_row1(execution_tier)
     if shared_missing is not None:
         missing = shared_missing
     else:
