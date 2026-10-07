@@ -438,9 +438,11 @@ def rec_env(store) -> dict[str, str]:
 
 def workspace_ident():
     from bullhorn_mcp.identity.principal import IdentityContext
+    from bullhorn_mcp.identity.roles import Roles
 
     tenant = Mock()
     tenant.tenant_key = "tenant-1"
+    tenant.roles = Roles(analytics_viewers=frozenset({"p-ws"}))  # Phase 6 M2: the analytics grant
     return IdentityContext(initiating_principal="p-ws", principal_display="p-ws", tenant_key="tenant-1", executing_bullhorn_identity=None,
                            mode="user", access_tier="workspace_only", tenant=tenant)
 

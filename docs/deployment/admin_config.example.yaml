@@ -67,6 +67,9 @@ tenants:
       write_approvers:
         - issuer: https://idp.example.com
           subject: example-admin-subject
+      analytics_viewers:     # Tier 2 analytics grant (D-6-2); empty list = nobody
+        - issuer: https://idp.example.com
+          subject: example-analytics-viewer-subject
     service_principals:
       - issuer: https://idp.example.com
         subject: example-analytics-service

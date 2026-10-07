@@ -2,10 +2,16 @@
 
 | | |
 |---|---|
-| **Status** | Binding Architect specification, 2026-10-07. Time-boxed vertical slice. D-5-25 scope discipline applies. **Amendments M1-A and M1-B** (at the end of this document) are binding. Both reviews have passed; M1-B is the last fix. |
-| **Governing documents** | D-5-5, D-5-11, D-5-15, D-5-21, D-5-24 (`PHASE5_PROPOSAL.md`); `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8 (TT-1..TT-8); `CANONICAL_ACTIVITY_VOCABULARY.md`; `PHASE5C_WORK_PACKAGE.md` C4-2 / P5C-1. |
+| **Status** | Binding Architect specification, 2026-10-07. Time-boxed vertical slice. D-5-25 scope discipline applies. **Amendments M1-A and M1-B** (at the end of this document) are binding. Both reviews have passed; M1-B is the last fix. **Superseded in part by `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8.8 (D-6-1..D-6-4): see "Policy supersession" below.** |
+| **Governing documents** | D-5-5, D-5-11, D-5-15, D-5-21, D-5-24 (`PHASE5_PROPOSAL.md`); `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8 (TT-1..TT-8, and §8.8); `CANONICAL_ACTIVITY_VOCABULARY.md`; `PHASE5C_WORK_PACKAGE.md` C4-2 / P5C-1. |
 | **Baseline** | Phase 5 HEAD (READY FOR COMMIT). Tools: 22 → **23**. |
 | **Data path** | **Live Bullhorn only**, through the existing 5C internal services. There is no analytics store; the Analytics/Data Pipeline Agent's recommendation is deferred to a later milestone. |
+
+> **Policy supersession (2026-10-07; D-6-1..D-6-4).** Under §3 of this document, **any** `workspace_only` caller, including a user who has logged out of Bullhorn, receives Tier 2 aggregates. That behaviour is **superseded**:
+> - Tier 2 analytics requires an explicit, admin-controlled Workspace analytics grant.
+> - Being logged out or unlinked never grants it.
+>
+> The M1 code does not yet conform. This is P6-12: pre-production required, and it **blocks any shared deployment that exposes this tool**. Tier 1 behaviour (the caller's own session) already conforms to D-6-1.
 
 ## 1. The slice (and what it is not)
 

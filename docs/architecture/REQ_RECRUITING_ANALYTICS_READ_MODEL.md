@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Recorded 2026-10-06 as a roadmap and specification requirement. On the same day it was reconciled with the operational safe-write requirement and with the user's final, fixed phase order (`ROADMAP.md` revision 3). No phase work has started. **§8 (the two-tier data access model) was added on 2026-10-07 and is binding** (D-5-24). |
+| **Status** | Recorded 2026-10-06 as a roadmap and specification requirement. On the same day it was reconciled with the operational safe-write requirement and with the user's final, fixed phase order (`ROADMAP.md` revision 3). No phase work has started. **§8 (the two-tier data access model) was added on 2026-10-07 and is binding** (D-5-24). **§8.8 (analytics authorization policy, D-6-1..D-6-4; 2026-10-07) is binding and supersedes any conflicting text.** |
 | **Source** | A user requirement relayed by the coordinator on 2026-10-06, restated and merged in the user's final roadmap injection. §1 transcribes it faithfully. §2 onward is Architect analysis. |
 | **Shared vocabulary** | `CANONICAL_ACTIVITY_VOCABULARY.md` is the single definition of the activity concepts and the event shape. This document refers to it and does not redefine them. |
 | **Related** | `REQ_TENANT_SETUP_MAPPING_MANAGEMENT.md` (tenant value mappings, HV-1, CT-1, SB-1..13) and `REQ_OPERATIONAL_ACTIVITY_SAFE_WRITE.md` |
@@ -150,16 +150,18 @@ This document makes no source changes and no test changes, starts no phase work,
 
 **Single source.** Other documents reference this section and must not restate it.
 
+**Supersession.** §8.8 (D-6-1..D-6-4) supersedes any conflicting text in §8.1–§8.5, in particular the definition of who receives Tier 2.
+
 ### 8.1 Tiers (TT-1)
 
 | Tier | Who | May receive |
 |---|---|---|
 | **Tier 1, `bullhorn_user`** | An authenticated workspace principal **with a valid linked Bullhorn session** (5A) | Record-level and aggregate Bullhorn data, according to their own Bullhorn permissions and MCP policy: candidates, jobs, submissions, interviews, notes, placements, clients, and approved writes |
-| **Tier 2, `workspace_only`** | An authenticated workspace principal **without** a valid linked Bullhorn session | **Only** approved, de-identified aggregate, historical or statistical results, computed through the read-only service identity |
+| **Tier 2, `workspace_only`** | An authenticated workspace principal **without** a valid linked Bullhorn session (*superseded by D-6-2..D-6-4: Tier 2 analytics now requires an explicit grant*) | **Only** approved, de-identified aggregate, historical or statistical results, computed through the read-only service identity |
 
 **Tier derivation (TT-2).**
 - The tier comes **only** from the authenticated identity context (5A), never from tool arguments or the model.
-- A Bullhorn session that is linked but expired or invalid means `workspace_only` until the user re-links.
+- A Bullhorn session that is linked but expired or invalid means `workspace_only` until the user re-links. Under D-6-3, this state on its own no longer grants any analytics.
 - Service principals and local-mode callers are separate modes. They are not Tier 2 users.
 
 ### 8.2 What Tier 2 may and must never receive
@@ -198,7 +200,7 @@ This document makes no source changes and no test changes, starts no phase work,
 | Tools | Tier 1 | Tier 2 |
 |---|---|---|
 | Legacy 10, `find_records`, `get_activity`, `get_notes`, `create_note`, `confirm_write`, `search_entities`, `query_entities` | yes (per policy) | **denied** (`bullhorn_auth_required`), with zero Bullhorn calls and no service fallback |
-| `get_recruiting_metrics` (Phase 6) | yes, full (with drill-back) | **yes**, the primary Tier 2 interface; tier enforced automatically |
+| `get_recruiting_metrics` (Phase 6) | yes, full (with drill-back) | **yes**, the primary Tier 2 interface; tier enforced automatically (*D-6-2..D-6-4: only for principals holding the analytics grant*) |
 | `bullhorn_session` | yes | yes (so the user can link their Bullhorn account) |
 | `setup_status` | yes | yes (status only, no record data) |
 | Setup / admin tools | admin role only | admin role only |
@@ -239,7 +241,8 @@ The reviewer must attack each of these:
 - overly precise geographic queries;
 - service-identity raw-data leakage;
 - non-Bullhorn (Tier 2) users invoking record-level tools;
-- parameter manipulation to obtain raw records.
+- parameter manipulation to obtain raw records;
+- *(D-6-3)* a logged-out, expired or unlinked user without the analytics grant obtaining any analytics.
 
 ### 8.7 Open questions (Phase 6 work package)
 
@@ -250,3 +253,28 @@ The reviewer must attack each of these:
 | Q-T3 | The source of the metro and region definitions. |
 | Q-T4 | The initial approved Tier 2 metric catalog. |
 | Q-T5 | The differencing-history retention window and the query budget. |
+
+### 8.8 Analytics authorization policy (binding user decisions D-6-1..D-6-4, 2026-10-07)
+
+**Status.** These decisions are binding, and **supersede** all conflicting text in this document, in `PHASE5_PROPOSAL.md` (D-5-24), in `PHASE6_M1_WORK_PACKAGE.md` and in `ROADMAP.md`.
+
+| ID | Decision |
+|---|---|
+| **D-6-1** | **Tier 1 analytics stays within the caller's own Bullhorn permissions by default.** Analytics for a Bullhorn-linked user is computed under that user's session, as in M1. Any future store-backed Tier 1 aggregate must not exceed what that user can see in Bullhorn, unless D-6-2 applies. |
+| **D-6-2** | **Broader, tenant-wide analytics requires a separately granted Workspace analytics permission** (the "analytics grant"). This covers any aggregate beyond the caller's own Bullhorn visibility, including every service-identity Tier 2 aggregate. The grant is per tenant, explicit and admin-controlled. |
+| **D-6-3** | **Logging out of Bullhorn must not itself grant Tier 2 analytics access.** Being unlinked, expired, pending or logged out never implies any analytics entitlement. Such a caller without the grant is **denied** analytics, with zero Bullhorn calls and zero service-identity calls. |
+| **D-6-4** | **Tier 2 access comes from trusted Workspace or admin authorization only**, independent of the Bullhorn link state. The trusted source is server-side admin configuration, or a claim in the verified token. It is never a tool argument, a model output or the user's own link or unlink action. |
+
+**What this supersedes.**
+- §8.1's definition of Tier 2 as any principal without a linked session.
+- §8.3's "yes" for every Tier 2 caller.
+- The P6-5 acceptance in `DEFERRED_DEBT.md`.
+- The M1 behaviour (`PHASE6_M1_WORK_PACKAGE.md` §3) under which any `workspace_only` caller, including a logged-out Bullhorn user, receives Tier 2 aggregates.
+
+**Conformance gap (P6-12).** The current M1 code does **not** conform: it serves Tier 2 aggregates to any `workspace_only` caller.
+- This is **pre-production required**.
+- It **blocks any shared-mode deployment** that exposes `get_recruiting_metrics`.
+- Local mode is unaffected, because it has no Tier 2.
+- Until it is fixed, a shared deployment must not run M1. An interim mitigation is acceptable: for example, no service principal configured, which already gives `unavailable`.
+
+**Q-P1 is resolved by default.** Store-backed tenant-wide aggregates are available **only** to principals holding the analytics grant. Any other Tier 1 user is served live under their own session, or from a store filtered to their own Bullhorn visibility; the latter requires HV.

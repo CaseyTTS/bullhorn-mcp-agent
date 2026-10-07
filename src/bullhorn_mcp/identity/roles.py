@@ -61,6 +61,7 @@ def parse_principal_list(where: str, value: object, errors: list[str]) -> frozen
 class Roles:
     setup_admins: frozenset[str] = field(default_factory=frozenset)
     write_approvers: frozenset[str] = field(default_factory=frozenset)
+    analytics_viewers: frozenset[str] = field(default_factory=frozenset)  # Phase 6 M2 (D-6-2)
     service_principals: frozenset[str] = field(default_factory=frozenset)
 
     def is_setup_admin(self, principal_key: str | None) -> bool:
@@ -68,6 +69,9 @@ class Roles:
 
     def is_write_approver(self, principal_key: str | None) -> bool:
         return principal_key is not None and principal_key in self.write_approvers
+
+    def is_analytics_viewer(self, principal_key: str | None) -> bool:
+        return principal_key is not None and principal_key in self.analytics_viewers
 
     def is_service(self, principal_key: str | None) -> bool:
         return principal_key is not None and principal_key in self.service_principals

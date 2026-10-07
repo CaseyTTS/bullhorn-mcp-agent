@@ -3,12 +3,12 @@
 | | |
 |---|---|
 | **Owner** | Architect |
-| **Revision** | 3 (2026-10-06), plus the **Phase 5 approval** (2026-10-07; `PHASE5_PROPOSAL.md`, binding decisions D-5-1..D-5-25). The phase order is fixed by the user. |
-| **Requirements reconciled** | `REQ_TENANT_SETUP_MAPPING_MANAGEMENT.md` (TS, HV-1, CT-1, SB-1..13); `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` (RA-1..13, and §8, the two-tier model); `REQ_OPERATIONAL_ACTIVITY_SAFE_WRITE.md` (OW-0..13); the Phase 5 user decisions (D-5-n). |
+| **Revision** | 3 (2026-10-06), plus the **Phase 5 approval** (2026-10-07; `PHASE5_PROPOSAL.md`, binding decisions D-5-1..D-5-25), plus the **analytics authorization policy** (2026-10-07; D-6-1..D-6-4 in `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8.8). The phase order is fixed by the user. |
+| **Requirements reconciled** | `REQ_TENANT_SETUP_MAPPING_MANAGEMENT.md` (TS, HV-1, CT-1, SB-1..13); `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` (RA-1..13, and §8, the two-tier model, with §8.8); `REQ_OPERATIONAL_ACTIVITY_SAFE_WRITE.md` (OW-0..13); the Phase 5 user decisions (D-5-n). |
 | **Shared vocabulary** | `CANONICAL_ACTIVITY_VOCABULARY.md` is the single definition of the activity concepts and of the operation→concept mapping. |
 | **Base** | Plan `enter-planning-mode-only-binary-cherny.md` §8, amended by ROADMAP-AMENDMENT-1..4 (`DEFERRED_DEBT.md`) and the approved Phase 5 amendments PA-1..PA-6. |
 | **Precedence** | This file supersedes the phase numbering of plan §8 and of earlier roadmap revisions. All plan §8 scope commitments are preserved. Completed phases are not deconstructed. |
-| **Current state** | **Phase 5 COMPLETE.** **Phase 6 M1 COMPLETE** (2026-10-07; both reviews PASS, plus the M1-B fix and its re-check). The public tool count is **23**. The next Phase 6 slices are listed in §3. |
+| **Current state** | **Phase 5 COMPLETE.** **Phase 6 M1 COMPLETE** (2026-10-07; both reviews PASS, plus the M1-B fix and its re-check). The public tool count is **23**. **M1 does not yet conform to D-6-2..D-6-4 (P6-12): no shared deployment may expose `get_recruiting_metrics` until it does.** |
 
 ## Standing rules
 
@@ -77,6 +77,12 @@
     - Every record-level tool is denied to Tier 2. `get_recruiting_metrics` enforces the tier automatically.
     - Authorization and de-identification happen in the server before anything is returned to the model, never through prompting.
 
+11. **Analytics authorization (D-6-1..D-6-4; REQ §8.8; supersedes conflicting text, including constraint 10's definition of who gets Tier 2).**
+    - Tier 1 analytics stays within the caller's own Bullhorn permissions.
+    - Tenant-wide or Tier 2 analytics requires an explicit, admin-controlled Workspace analytics grant.
+    - A Bullhorn logout, or having no linked session, never grants Tier 2.
+    - Tier 2 access comes only from trusted Workspace or admin authorization.
+
 ---
 
 ## 1. Ownership
@@ -94,10 +100,10 @@
 | 7 | Generalized safe-write infrastructure | **7** | 4B |
 | 8 | Write-specific permissions | **4B** (`note.create`) | 7 |
 | 9 | Duplicate / idempotency safeguards | **4B** | 7, 8 |
-| 10 | Aggregation / metrics, including the **Tier 2** de-identified interface | **6** (single `get_recruiting_metrics`; **M1 done**) | |
+| 10 | Aggregation / metrics, including the **Tier 2** de-identified interface | **6** (single `get_recruiting_metrics`; M1 done; the grant is due in M2) | |
 | 11 | Dashboard-agent consumption | **6** | |
 | 12 | **Per-user Bullhorn auth / sessions / identity**, including the `access_tier` hook | **5A** (done) | 9 (re-running the security matrices) |
-| 13 | **Two-tier gating of record-level tools** (D-5-24) | **5C** (done) | 5A (hook), 6 (Tier 2 metrics; M1 done) |
+| 13 | **Two-tier gating of record-level tools** (D-5-24) | **5C** (done) | 5A (hook), 6 (Tier 2 metrics) |
 
 ### 1.2 Placement of other committed capabilities
 
@@ -138,8 +144,9 @@
 | **5A** | Identity & Sessions | **COMPLETE** (both re-reviews PASS, 2026-10-07) | 20 (+`bullhorn_session`) |
 | **5C** | Expanded Recruiting Reads + Streamlining + two-tier gating | **COMPLETE** (Round 2 re-reviews PASS, 2026-10-07) | 22 (+`find_records`, `get_activity`) |
 | **Phase 5 overall** | 5B + 5A + 5C | **COMPLETE** | 22 |
-| **6 — M1** | `get_recruiting_metrics`: period counts and stage ratios, two-tier, live Bullhorn | **COMPLETE** (both reviews PASS; M1-B closed-periods fix), 2026-10-07. Work package: `PHASE6_M1_WORK_PACKAGE.md` | **23** (+`get_recruiting_metrics`) |
-| 6 — next milestones | See §3 | Not started | 23 (no new tools planned) |
+| **6 — M1** | `get_recruiting_metrics`: period counts and stage ratios, two-tier, live Bullhorn | **COMPLETE** (both reviews PASS; M1-B closed-periods fix), 2026-10-07. **Not D-6 conformant (P6-12).** Work package: `PHASE6_M1_WORK_PACKAGE.md` | **23** (+`get_recruiting_metrics`) |
+| **6 — M2 (proposed)** | **Tier 2 analytics grant** (closes P6-12) | Proposed; no work package yet | 23 |
+| 6 — later milestones | See §3 | Not started | 23 (no new tools planned) |
 | 7 | Broader Writes | | |
 | 8 | Bulk Resume | | |
 | 9 | Auth / Security Closeout | | |
@@ -156,7 +163,7 @@ See `PHASE4A_WORK_PACKAGE.md` and `PHASE4B_WORK_PACKAGE.md`.
 
 See `PHASE5B_WORK_PACKAGE.md`, `PHASE5A_WORK_PACKAGE.md` and `PHASE5C_WORK_PACKAGE.md`, including their amendments and triages.
 
-### Phase 6: Analytics / Activity Timeline (PA-5 and D-5-24 applied)
+### Phase 6: Analytics / Activity Timeline (PA-5, D-5-24 and D-6-1..D-6-4 applied)
 
 **M1 (COMPLETE).** `get_recruiting_metrics` with:
 - a fixed metric catalog of 5 counts and 3 within-period ratios;
@@ -164,27 +171,23 @@ See `PHASE5B_WORK_PACKAGE.md`, `PHASE5A_WORK_PACKAGE.md` and `PHASE5C_WORK_PACKA
 - no dimensions.
 
 The tiers:
-- **Tier 1** gets exact values under the caller's own session.
+- **Tier 1** gets exact values under the caller's own session, which conforms to D-6-1.
 - **Tier 2** is computed under the service identity through the 5C internal services. It gets closed periods only, aligned cells, no margins, `k`-suppression (default 10), the quarter rule, and an exact output allowlist.
+- **Gap (P6-12):** Tier 2 is currently open to any `workspace_only` caller, with no analytics grant.
 
-**Next milestones (not started; each needs its own work package).** The order follows `DEFERRED_DEBT.md` and `ANALYTICS_PIPELINE_RECOMMENDATIONS.md`:
+**Next milestones (not started; each needs its own work package):**
 
-1. **M2: hardening and settings.**
-   - P6-1 and P6-2 (`set_setting` for integer settings);
-   - P6-4 (a per-tenant cap on service-identity reads);
-   - P6-6..P6-11;
-   - the Phase 6 cleanups P5C-9..P5C-13.
-2. **M3: coarse dimensions for Tier 1.** Dimensions such as recruiter or priority, applied first to Tier 1.
-   - Tier 2 dimensions (geography, client segments with the dominance rule, rounding, and the query budget, Q-T1..T5) only after a separate user decision.
-3. **M4: analytics store** (only on measured need). It follows the pipeline recommendations: derived canonical events, small closed `dateAdded` backfill windows, no dlt in the first slice, and Tier 2 reading only through an aggregate view. It closes P6-3 by freezing snapshots of closed cells.
-   - **Prerequisite: the user's decision on Q-P1** (see `DEFERRED_DEBT.md`, "Phase 6 M1 close-out"). Until then, Tier 1 stays live under the caller's session.
-4. **Later:**
+1. **M2: Tier 2 analytics grant** (pre-production required; closes P6-12). It may also fold in P6-4 if that fits.
+2. **M3: hardening and settings:** P6-1, P6-6..P6-11, and the Phase 6 cleanups P5C-9..P5C-13.
+3. **M4: coarse dimensions for Tier 1.** Dimensions such as recruiter or priority. Tier 2 dimensions (geography, client segments with the dominance rule, rounding, and the query budget, Q-T1..T5) come only after a separate user decision.
+4. **M5: analytics store** (only on measured need). It follows `ANALYTICS_PIPELINE_RECOMMENDATIONS.md` and closes P6-3 by freezing snapshots of closed cells. Per D-6-2, store-backed tenant-wide aggregates go only to granted principals.
+5. **Later:**
    - the timeline as a `get_activity` scope;
    - composites;
    - the dashboard-agent contract;
    - the OW-13 end-to-end test.
 
-The Security & Identity Reviewer's two-tier attack list (REQ §8.6) is blocking for every milestone.
+The Security & Identity Reviewer's two-tier attack list (REQ §8.6, including the D-6-3 item) is blocking for every milestone.
 
 ### Phase 7: Broader Writes
 
@@ -209,19 +212,20 @@ Unchanged.
 
 ## 4. Deferred-debt targets
 
-`DEFERRED_DEBT.md`, section "Phase 6 M1 close-out: updated open debt by target", is authoritative.
+`DEFERRED_DEBT.md`, section "Analytics authorization policy (D-6-1..D-6-4) and P6 classification", is authoritative.
 
 | Target | Open items |
 |---|---|
-| Phase 6 | 16 |
+| Pre-production required (P6) | P6-4, P6-12 (P6-5 is resolved through P6-12) |
+| Phase 6 follow-ups | 13 |
+| Optimization | 2 (P6-2, P6-9) |
 | Phase 7 | 19 |
-| Phase 8 | 0 separate (only OWG-9's batch part, counted under Phase 7) |
 | Phase 9 | 35 |
-| Pre-production / external gates | 2 (P5A-7; P5A-16, which also covers P6-4) |
+| Pre-production / external gates | 2 (P5A-7; P5A-16, which covers P6-4 and P6-12) |
 | Waiting on an HV item (fails closed meanwhile) | 4 (NB-15, RAG-5, OWG-8, P4B-5) |
-| **Total** | **76** |
+| **Total** | **77** |
 
-**Open user decision:** **Q-P1**, whether Tier 1 aggregates may come from a store built under the service identity (`DEFERRED_DEBT.md`). It must be decided before M4.
+**Q-P1 is resolved by default under D-6-2.** Store-backed tenant-wide aggregates go only to granted principals.
 
 ## 5. External dependencies and the pre-production gate
 
@@ -245,12 +249,13 @@ Unchanged.
 
 ### Pre-production gate (P5A-16)
 
-Before the first production shared deployment, re-assess:
+Before the first production shared deployment, re-assess or close:
 - the redaction and DoS items P5A-10..P5A-14;
 - P5C-2 (logger children created later);
 - P5C-3 (the legacy audit records raw query text and path IDs);
 - P5C-16 (the cursor / audit key silently falling back to a per-process secret);
-- P6-4 (the service-identity read load from Tier 2).
+- **P6-4** (the service-identity read load from Tier 2);
+- **P6-12** (the D-6 analytics grant). P6-12 is a hard block: until M2 lands, no shared deployment may expose Tier 2 metrics. The interim measure is to configure no service principal for shared tenants.
 
 Single-worker operation is enforced (5A L-5), and DEBUG logging is unsupported in shared mode.
 

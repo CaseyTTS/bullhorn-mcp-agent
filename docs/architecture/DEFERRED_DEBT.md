@@ -6,7 +6,7 @@
 - **Architecture plan:** `enter-planning-mode-only-binary-cherny.md` (the user's plan directory).
 - **Phase numbers** follow the user-fixed `docs/architecture/ROADMAP.md` revision 3: 4A, 4B, 5, 6, 7, 8, 9 (ROADMAP-AMENDMENT-4). Every item's target was re-checked against that revision on 2026-10-06.
 - **Phase 4A close-out (2026-10-06).** Closures and re-targets are recorded in the section "Phase 4A close-out" near the end of this file. Where an item below names an older target, that section supersedes it.
-- **Phase 5 close-out (2026-10-07).** The section "Phase 5 close-out: open debt by target" is the authoritative summary as of Phase 5. It is updated by "Phase 6 M1 close-out" at the end of this file, which is the current authoritative summary.
+- **Phase 5 close-out (2026-10-07).** The section "Phase 5 close-out: open debt by target" is the authoritative summary as of Phase 5. It is updated by "Phase 6 M1 close-out", and then by "Analytics authorization policy (D-6-1..D-6-4) and P6 classification" at the end of this file. That last section is the **current authoritative summary**.
 
 **Status values:**
 
@@ -1017,14 +1017,13 @@ The triage is in `PHASE5B_WORK_PACKAGE.md`, "5B Review Triage".
 | P6-2 | M1-A2 | `Settings.tier2_min_cohort` is typed `Any`. It is validated at runtime; mypy is blocked by the frozen `changes.py:344`. | Phase 6, next milestone (with P6-1) | OPEN-SCHEDULED |
 | P6-3 | M1-B residual | A closed Tier 2 period can still change through backdated records or deletes in Bullhorn. This is a narrow differencing channel. | Phase 6, analytics-store milestone (snapshot or frozen closed cells) | OPEN-SCHEDULED |
 | P6-4 | Sec NB-2 | There is no per-tenant cap on the service-identity read load: N Tier 2 users can drive about 2N concurrent service reads. | Phase 6, next milestone. Also added to the P5A-16 pre-production gate. | OPEN-SCHEDULED |
-| P6-5 | Sec NB-3 | A logged-out or restricted Bullhorn user becomes `workspace_only` and receives tenant-wide **suppressed** aggregates. This is **accepted explicitly**, per REQ §8.1: Tier 2 is defined by workspace identity, and receives only de-identified aggregates. | — | CLOSED (accepted) |
+| P6-5 | Sec NB-3 | A logged-out or restricted Bullhorn user becomes `workspace_only` and receives tenant-wide **suppressed** aggregates. This was accepted explicitly, per REQ §8.1. (**Superseded** by D-6-1..D-6-4; see below.) | — | Superseded (see below) |
 | P6-6 | Sec NB-4 | A requirement string containing spaces makes the Tier 2 response fail the allowlist (`policy_violation`). This is an availability issue only; it fails closed. | Phase 6, next milestone | OPEN-SCHEDULED |
 | P6-7 | Ind NB-2 | Tier 1 drops the warnings from `get_activity`. | Phase 6, next milestone | OPEN-SCHEDULED |
 | P6-8 | Ind NB-3 | Tier 2 maps non-`ok` outcomes to the `setup_required` label. The label is inaccurate, but nothing leaks. | Phase 6, next milestone | OPEN-SCHEDULED |
 | P6-9 | Ind NB-4 | `validate_output` accepts NaN or Inf ratios. Unreachable today. | Phase 6, next milestone | OPEN-SCHEDULED |
 | P6-10 | Ind NB-5 | `audit_args` runs before the `try` block in `tools/metrics.py`. | Phase 6, next milestone | OPEN-SCHEDULED |
 | P6-11 | Ind NB-8 | The SM-7 resource-exhaustion assertion is loose. | Phase 6, next milestone | OPEN-SCHEDULED |
-| P6-12 | M1-B Sec NB | Tier 2 still fetches open months; an incomplete/unavailable open month can change a metric's overall `status` (reveals no number). Exclude open months from status computation. | Phase 6, next milestone | OPEN-SCHEDULED |
 
 ### Analytics pipeline recommendations, and the open user decision Q-P1
 
@@ -1035,21 +1034,80 @@ The triage is in `PHASE5B_WORK_PACKAGE.md`, "5B Review Triage".
 - There is no dlt in the first store slice.
 - Tier 2 reads only through an aggregate view layer.
 
-**Q-P1 (open; a decision for the user is required before any analytics-store milestone).** A store built under the **service identity** would contain records that some Tier 1 users cannot see in Bullhorn. If Tier 1 metrics were served from that store, a Tier 1 user could receive aggregates beyond their own Bullhorn permissions. The user must decide one of these:
+**Q-P1 (open; a decision for the user is required before any analytics-store milestone).** (*Resolved by default under D-6-2; see below.*) A store built under the **service identity** would contain records that some Tier 1 users cannot see in Bullhorn. If Tier 1 metrics were served from that store, a Tier 1 user could receive aggregates beyond their own Bullhorn permissions. The user must decide one of these:
 - (a) Tier 1 metrics stay live, under the caller's session;
 - (b) Tier 1 aggregates from the store are permitted, and the policy says so;
 - (c) the store is partitioned or filtered by Bullhorn visibility, which requires HV.
 
 Until the user decides, the binding default is **(a)**, as in M1.
 
-### Updated open debt by target (authoritative; supersedes the Phase 5 table)
+### Updated open debt by target (superseded below)
 
 | Target | Count | Items |
 |---|---|---|
-| **Phase 6** | 17 | RAG-4, P5C-9, P5C-10, P5C-11, P5C-12, P5C-13, P6-1, P6-2, P6-3, P6-4, P6-6, P6-7, P6-8, P6-9, P6-10, P6-11, P6-12 |
+| **Phase 6** | 16 | RAG-4, P5C-9, P5C-10, P5C-11, P5C-12, P5C-13, P6-1, P6-2, P6-3, P6-4, P6-6, P6-7, P6-8, P6-9, P6-10, P6-11 |
 | **Phase 7** | 19 | Unchanged from the Phase 5 table |
 | **Phase 8** | 0 separate | Unchanged |
 | **Phase 9** | 35 | Unchanged from the Phase 5 table |
 | **Pre-production / external gates** | 2 | P5A-7; P5A-16, which now also covers P6-4 |
 | **Waiting on an HV item** | 4 | Unchanged |
 | **Total open** | **76** | |
+
+---
+
+## Analytics authorization policy (D-6-1..D-6-4) and P6 classification (2026-10-07; current authoritative summary)
+
+**Policy.** The binding user decisions D-6-1..D-6-4 are recorded **once**, in `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8.8:
+- D-6-1: Tier 1 analytics stays within the caller's own Bullhorn permissions.
+- D-6-2: tenant-wide analytics requires a separately granted Workspace analytics permission.
+- D-6-3: a Bullhorn logout never grants Tier 2.
+- D-6-4: Tier 2 access comes only from trusted Workspace or admin authorization.
+
+**What they supersede:**
+- the **P6-5 acceptance**;
+- the M1 behaviour under which any `workspace_only` caller receives Tier 2 aggregates;
+- Q-P1's open status. Q-P1 is resolved by default: store-backed tenant-wide aggregates go **only** to granted principals.
+
+**P6 classification.** Each item has exactly one class.
+
+| ID | Class | Reason |
+|---|---|---|
+| P6-1 | Phase 6 follow-up | Usability. `k` is already admin-settable through import, with a safe default of 10. |
+| P6-2 | Optimization | Type tightening only. The value is validated at runtime, so behaviour is unaffected. |
+| P6-3 | Phase 6 follow-up | A narrow residual differencing channel (backdates and deletes in closed periods). It is fixed with the snapshot store. |
+| P6-4 | **Pre-production required** | Unbounded service-identity load from Tier 2 can exhaust Bullhorn rate limits for the whole tenant in a shared deployment. |
+| P6-5 | **Pre-production required** | Superseded. The behaviour it accepted now violates D-6-3; it is resolved by P6-12. |
+| P6-6 | Phase 6 follow-up | Availability only; it fails closed with `policy_violation`. |
+| P6-7 | Phase 6 follow-up | Tier 1 output completeness (warnings). No safety impact. |
+| P6-8 | Phase 6 follow-up | An inaccurate status label for Tier 2. No data leaks. |
+| P6-9 | Optimization | Defensive hardening of an unreachable path. |
+| P6-10 | Phase 6 follow-up | Error-path robustness of the audit argument build. Low impact, but a correctness item. |
+| P6-11 | Phase 6 follow-up | Test precision for SM-7. |
+| **P6-12** | **Pre-production required, and it blocks any shared deployment exposing `get_recruiting_metrics`** | **D-6-2..D-6-4 conformance gap.** M1 serves Tier 2 aggregates to every `workspace_only` caller, including logged-out Bullhorn users, without an analytics grant. Fix: an explicit, per-tenant, admin-controlled analytics grant, with no grant → denied and zero calls. Interim: do not configure a service principal for shared tenants (M1 then returns `unavailable`), or do not deploy shared mode. Local mode is unaffected. |
+
+**Open debt by target (authoritative):**
+
+| Target | Count | Items |
+|---|---|---|
+| **Pre-production required** (blocks the P5A-16 gate) | 4 | P6-4, P6-5 (via P6-12), P6-12, plus the existing gate items P5A-7 and P5A-16 counted below |
+| **Phase 6 follow-ups** | 13 | RAG-4, P5C-9, P5C-10, P5C-11, P5C-12, P5C-13, P6-1, P6-3, P6-6, P6-7, P6-8, P6-10, P6-11 |
+| **Optimization** (Phase 6 or later, as convenient) | 2 | P6-2, P6-9 |
+| **Phase 7** | 19 | Unchanged |
+| **Phase 9** | 35 | Unchanged |
+| **Pre-production / external gates** | 2 | P5A-7, P5A-16. P5A-16 now covers P6-4 and P6-12. |
+| **Waiting on an HV item** | 4 | Unchanged |
+| **Total open** | **77** | 76 plus P6-12. P6-5 is now counted as P6-12 and is not double-counted: 3 pre-production P6 rows + 13 + 2 + 19 + 35 + 2 + 4 − 1 = 77. |
+
+
+## Phase 6 M2 close-out (2026-10-07)
+
+M2 — Tier 2 analytics grant: Independent PASS, Security & Identity PASS (time-boxed reviews).
+- **P6-12 CLOSED by M2**: Tier 2 `get_recruiting_metrics` now requires the selected tenant's admin-config `roles.analytics_viewers` grant before any service-session resolution or Bullhorn call (D-6-1..D-6-4 conformance); logout/expired/pending/unlinked states no longer imply Tier 2.
+- **P6-4 CLOSED by M2**: per-tenant cap of 2 concurrent Tier 2 computations (excess → `rate_limited`, zero calls).
+- **P6-5**: resolved via P6-12 (superseded acceptance no longer applies).
+
+| ID | Source | Finding | Class | Target | Status |
+|---|---|---|---|---|---|
+| P6-13 | M2 Ind NB-7 | `_parse_roles` service-principal overlap check does not include `analytics_viewers` (a principal can be both a service principal and an analytics viewer). | Phase 6 follow-up | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-14 | M2 Ind NB-9 | `tools/metrics.py` audits a Tier 2 `denied` result as success=true (non-error statuses treated as success). | Phase 6 follow-up | Phase 6, next milestone | OPEN-SCHEDULED |
+| P6-15 | M2 Sec NB | Time-boxed M2 security review was code-path based without an independent concurrent/forged-request harness; also confirm `identity/sessions.py:273` `service_client` caller cannot reach a Tier 2 path. Re-attack before first shared deployment. | Pre-production required | Pre-production gate (with P5A-16) | OPEN-SCHEDULED |

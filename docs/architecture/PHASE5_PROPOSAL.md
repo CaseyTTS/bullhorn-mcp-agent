@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **APPROVED by the user, 2026-10-07.** Decisions D-5-1..D-5-25 in §0 are **binding**. Where §0 and the analysis in §1–§10 disagree, §0 wins. |
+| **Status** | **APPROVED by the user, 2026-10-07.** Decisions D-5-1..D-5-25 in §0 are **binding**. Where §0 and the analysis in §1–§10 disagree, §0 wins. **D-5-24 is superseded in part by `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8.8 (D-6-1..D-6-4).** |
 | **Author** | Architect. Drafted 2026-10-07 and approved the same day. |
 | **Baseline** | Phases 0–4B are committed (`d5330fb`) and are not reopened. The amendments PA-1..PA-6 are approved as recorded in §0. |
 | **Sub-phase work packages** | 5B: `PHASE5B_WORK_PACKAGE.md` (PASS). 5A: `PHASE5A_WORK_PACKAGE.md` (PASS). 5C: `PHASE5C_WORK_PACKAGE.md`. |
@@ -37,7 +37,7 @@
 | D-5-21 | **Tool-surface rule.** Internally rich, externally compact. Never consolidate where that weakens security boundaries, permission differences, approval semantics, audit clarity or the model's ability to choose the right tool. Each sub-phase Reviewer flags unnecessary tool growth and duplicated domain logic. |
 | D-5-22 | **Privacy.** No tenant-specific data from the user's company is committed to the public repo: no credentials, tenant profile, field mappings, workflow values, SSO configuration, Note actions, workbook data or business rules. **Process:** each sub-phase runs Architect → Builder → a fresh Reviewer. The gates for each sub-phase are full pytest, ruff, mypy, packaging/resource checks where applicable, the 25/25 regression suite, and the new Phase 5 regression/security cases. If Bullhorn documentation or tenant verification blocks a capability, it fails closed, is documented precisely, and work continues with what is safe. Do not begin Phase 6. No commit or push happens until all Phase 5 work and gates are complete. |
 | D-5-23 | **Harness (user directive, binding from Phase 5).** The order is Architect → Builder → Independent Reviewer → **Security & Identity Reviewer** (`docs/process/SECURITY_REVIEWER.md`) → final gates. Every Phase 5 sub-phase requires **both** reviewers to PASS: 5B (consequential writes and secrets), 5A (the full minimum attack set, as blocking ACs) and 5C (session/tenant isolation of reads, and provenance). Each sub-phase work package carries a "Security & Identity Review" section. |
-| D-5-24 | **Two-tier data access model** (user requirement, 2026-10-07; binding for 5C and Phase 6). **Tier 1**: Bullhorn-authenticated users get record-level and aggregate data. **Tier 2**: workspace-only users get only approved, de-identified aggregate results computed through the read-only service identity. The full requirement and controls are defined **once**, in `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8: cohort thresholds, complementary suppression, differencing defences, approved geography levels, anonymous client segments, the Tier 2 output allowlist, record-level tools denied to Tier 2, `get_recruiting_metrics` as the primary Tier 2 interface, and the blocking security tests. **5A** adds only the identity hook (`PHASE5A_WORK_PACKAGE.md` Amendment A2). **5C** gates every record-level tool by tier. **Phase 6** implements Tier 2. |
+| D-5-24 | **Two-tier data access model** (user requirement, 2026-10-07; binding for 5C and Phase 6). **Tier 1**: Bullhorn-authenticated users get record-level and aggregate data. **Tier 2**: workspace-only users get only approved, de-identified aggregate results computed through the read-only service identity. The full requirement and controls are defined **once**, in `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8: cohort thresholds, complementary suppression, differencing defences, approved geography levels, anonymous client segments, the Tier 2 output allowlist, record-level tools denied to Tier 2, `get_recruiting_metrics` as the primary Tier 2 interface, and the blocking security tests. **5A** adds only the identity hook (`PHASE5A_WORK_PACKAGE.md` Amendment A2). **5C** gates every record-level tool by tier. **Phase 6** implements Tier 2.<br>**Superseded in part by REQ §8.8, D-6-1..D-6-4 (2026-10-07):**<br>• Tier 1 analytics stays within the caller's own Bullhorn permissions.<br>• Tenant-wide and Tier 2 analytics require an explicit Workspace analytics grant.<br>• A Bullhorn logout, or having no linked session, never grants Tier 2. |
 | D-5-25 | **Phase 5 scope is FROZEN** (user directive, 2026-10-07; binding for every remaining triage). See the rule immediately after this table. |
 
 **D-5-9 requirements (one-note tenant verification test).** The procedure must:
@@ -161,7 +161,7 @@ Phase 6 then adds `get_recruiting_metrics`, for **23**. The timeline is a `get_a
 
 **Review harness (D-5-23).** Each sub-phase runs Builder → Independent Reviewer → Security & Identity Reviewer → gates. Both reviewers are required for 5B, 5A and 5C.
 
-**Two-tier model (D-5-24).** 5A adds the identity hook, 5C does the record-level tier gating, and Phase 6 implements Tier 2. See `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8.
+**Two-tier model (D-5-24).** 5A adds the identity hook, 5C does the record-level tier gating, and Phase 6 implements Tier 2. See `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8, as amended by §8.8 (D-6-1..D-6-4).
 
 **Scope freeze (D-5-25).** From 2026-10-07, every triage applies the D-5-25 rule.
 

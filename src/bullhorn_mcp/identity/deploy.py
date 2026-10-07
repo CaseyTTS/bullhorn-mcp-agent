@@ -61,6 +61,7 @@ Schema (``shared``)::
         roles:                                          # per tenant (5A triage B-4)
           setup_admins: [<principal key> | {issuer: ..., subject: ...}]
           write_approvers: [...]
+          analytics_viewers: [...]                      # Tier 2 analytics grant (Phase 6 M2, D-6-2)
         service_principals: [...]                       # this tenant's read-only service identity callers
 
 Top-level ``roles`` / ``service_principals`` are accepted only when exactly one
@@ -418,10 +419,13 @@ def _parse_tenant(p: _Parser, tk: object, raw: object, base_url: str | None) -> 
 
 
 def _parse_roles(p: _Parser, prefix: str, raw_roles: object, raw_service: object) -> Roles:
-    r = p.mapping(f"{prefix}roles", raw_roles if raw_roles is not None else {}, set(), {"setup_admins", "write_approvers"})
+    r = p.mapping(
+        f"{prefix}roles", raw_roles if raw_roles is not None else {}, set(), {"setup_admins", "write_approvers", "analytics_viewers"}
+    )
     roles = Roles(
         setup_admins=parse_principal_list(f"{prefix}roles.setup_admins", r.get("setup_admins"), p.errors),
         write_approvers=parse_principal_list(f"{prefix}roles.write_approvers", r.get("write_approvers"), p.errors),
+        analytics_viewers=parse_principal_list(f"{prefix}roles.analytics_viewers", r.get("analytics_viewers"), p.errors),
         service_principals=parse_principal_list(f"{prefix}service_principals", raw_service, p.errors),
     )
     if roles.service_principals & (roles.setup_admins | roles.write_approvers):

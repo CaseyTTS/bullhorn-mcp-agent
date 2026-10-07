@@ -20,7 +20,7 @@ from bullhorn_mcp.metrics import tier2_policy as P
 from bullhorn_mcp.tools import metrics as metric_tools
 from bullhorn_mcp.tools import setup as setup_tools
 
-from ._identity_helpers import ADMIN, ALICE, BOB, REST_1, SVC, TK1, caller, link, no_caller
+from ._identity_helpers import ADMIN, ALICE, BOB, REST_1, SVC, TK1, caller, link, no_caller, pk
 from ._phase5c_helpers import FULL_CONFIG, make_client
 from .test_phase5c_security_tools import FORBIDDEN_PARAMS, _activity, _find, install_shared, root_capture  # noqa: F401
 from .test_phase6_m1_metrics import (
@@ -49,10 +49,14 @@ METRICS_SCHEMA = {
 }
 
 
+# Phase 6 M2: Tier 2 requires the analytics grant; the unlinked callers in these tests hold it.
+GRANT_ROLES = {"setup_admins": [pk(ADMIN)], "write_approvers": [pk(ADMIN), pk(BOB), pk(ALICE)], "analytics_viewers": [pk(BOB), pk(ALICE)]}
+
+
 @pytest.fixture
 def shared6(tmp_path, monkeypatch):
     """Tenant one with a configured (read-only) service identity."""
-    s = install_shared(tmp_path, monkeypatch, FULL_CONFIG, service=True)
+    s = install_shared(tmp_path, monkeypatch, FULL_CONFIG, service=True, roles=GRANT_ROLES)
     yield s
     deploy.reset()
     sessions.reset_caches()
@@ -60,7 +64,7 @@ def shared6(tmp_path, monkeypatch):
 
 @pytest.fixture
 def shared6_nosvc(tmp_path, monkeypatch):
-    s = install_shared(tmp_path, monkeypatch, FULL_CONFIG)
+    s = install_shared(tmp_path, monkeypatch, FULL_CONFIG, roles=GRANT_ROLES)
     yield s
     deploy.reset()
     sessions.reset_caches()
