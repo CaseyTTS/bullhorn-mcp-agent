@@ -1,0 +1,206 @@
+# Bullhorn query support, version 1 (Phase 5C, D-5C-3).
+#
+# The ONLY place where 5C records Bullhorn query mechanics. Every entry carries
+# the HV ID under which it was verified in
+# docs/architecture/PHASE5C_HV_VERIFICATION.md; an entry without one fails to
+# load (bullhorn_mcp.reads.support). Nothing here is tenant-specific.
+#
+# Operators are the canonical operator names of schema/query_builder.py; the
+# JPQL tokens they render to live in bullhorn/query_syntax.py. Filter values are
+# rendered only as literals (HV-Q2):
+#   - ints via str(int); booleans as true/false; timestamps as epoch ms (HV-Q5);
+#   - strings in single quotes, limited to the restricted charset because no
+#     escape rule is documented (string_escape_verified: false).
+version: 1
+
+syntax:
+  query:
+    hv: HV-Q2
+    string_escape_verified: false   # HV-Q2: no documented escape rule
+    prefix_match_verified: false    # HV-Q2: LIKE is not documented
+    float_literal_verified: false   # HV-Q2: only integer literals are documented
+    association_paths_verified: true  # HV-Q2: "owner.lastName = 'Smith'" (to-one only)
+    order_by_direction_verified: false  # HV-Q4: /query orderBy direction is undocumented
+    max_where_chars: 2000           # HV-Q12: conservative cap (GET is documented up to 7500)
+    max_fields: 30                  # HV-Q12: conservative cap
+    nested_fields_verified: true    # HV-Q13: fields=owner(id),address(city,zip)
+
+entities:
+  Candidate:
+    canonical_entity: candidate
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: isDeleted, nullable: false, hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      dateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      firstName: {ops: [eq, in, is_null], hv: HV-Q2}
+      lastName: {ops: [eq, in, is_null], hv: HV-Q2}
+      email: {ops: [eq, in, is_null], hv: HV-Q2}
+      phone: {ops: [eq, in, is_null], hv: HV-Q2}
+      mobile: {ops: [eq, in, is_null], hv: HV-Q2}
+      status: {ops: [eq, in, is_null], hv: HV-Q2}
+      occupation: {ops: [eq, in, is_null], hv: HV-Q2}
+      source: {ops: [eq, in, is_null], hv: HV-Q2}
+      "address.city": {ops: [eq, in, is_null], hv: HV-Q2}
+      "address.state": {ops: [eq, in, is_null], hv: HV-Q2}
+      "owner.id": {ops: [eq, in], hv: HV-Q2}
+      dateLastModified: {ops: [gte, lt, is_null], hv: HV-Q5}
+  JobOrder:
+    canonical_entity: job
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: isDeleted, nullable: true, hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      dateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      title: {ops: [eq, in, is_null], hv: HV-Q2}
+      status: {ops: [eq, in, is_null], hv: HV-Q2}
+      employmentType: {ops: [eq, in, is_null], hv: HV-Q2}
+      isOpen: {ops: [eq], hv: HV-Q2}
+      numOpenings: {ops: [eq, in, gt, gte, lt, lte], hv: HV-Q2}
+      startDate: {ops: [gte, lt, is_null], hv: HV-Q5}
+      salary: {ops: [eq, in, gt, gte, lt, lte], hv: HV-Q2}
+      payRate: {ops: [eq, in, gt, gte, lt, lte], hv: HV-Q2}
+      clientBillRate: {ops: [eq, in, gt, gte, lt, lte], hv: HV-Q2}
+      "address.city": {ops: [eq, in, is_null], hv: HV-Q2}
+      "address.state": {ops: [eq, in, is_null], hv: HV-Q2}
+      "clientCorporation.id": {ops: [eq, in], hv: HV-Q2}
+      "clientContact.id": {ops: [eq, in], hv: HV-Q2}
+      "owner.id": {ops: [eq, in], hv: HV-Q2}
+  JobSubmission:
+    canonical_entity: submission
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: isDeleted, nullable: false, hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      dateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      "candidate.id": {ops: [eq, in], hv: HV-Q2}
+      "jobOrder.id": {ops: [eq, in], hv: HV-Q2}
+      status: {ops: [eq, in, is_null], hv: HV-Q2}
+      source: {ops: [eq, in, is_null], hv: HV-Q2}
+      "sendingUser.id": {ops: [eq, in], hv: HV-Q2}
+  Placement:
+    canonical_entity: placement
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: null, reason: "no isDeleted field; hard-deletable (DELETE /entity)", hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      dateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      "candidate.id": {ops: [eq, in], hv: HV-Q2}
+      "jobOrder.id": {ops: [eq, in], hv: HV-Q2}
+      status: {ops: [eq, in, is_null], hv: HV-Q2}
+      dateBegin: {ops: [gte, lt, is_null], hv: HV-Q5}
+      dateEnd: {ops: [gte, lt, is_null], hv: HV-Q5}
+      employmentType: {ops: [eq, in, is_null], hv: HV-Q2}
+      salary: {ops: [eq, in, gt, gte, lt, lte], hv: HV-Q2}
+      payRate: {ops: [eq, in, gt, gte, lt, lte], hv: HV-Q2}
+      clientBillRate: {ops: [eq, in, gt, gte, lt, lte], hv: HV-Q2}
+      "jobSubmission.id": {ops: [eq, in], hv: HV-Q2}
+  ClientCorporation:
+    canonical_entity: client_corporation
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: null, reason: "immutable: neither hard- nor soft-deletable (DELETE /entity)", hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      dateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      name: {ops: [eq, in, is_null], hv: HV-Q2}
+      status: {ops: [eq, in, is_null], hv: HV-Q2}
+      phone: {ops: [eq, in, is_null], hv: HV-Q2}
+      companyURL: {ops: [eq, in, is_null], hv: HV-Q2}
+      "address.city": {ops: [eq, in, is_null], hv: HV-Q2}
+      "address.state": {ops: [eq, in, is_null], hv: HV-Q2}
+  ClientContact:
+    canonical_entity: client_contact
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: isDeleted, nullable: false, hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      dateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      firstName: {ops: [eq, in, is_null], hv: HV-Q2}
+      lastName: {ops: [eq, in, is_null], hv: HV-Q2}
+      email: {ops: [eq, in, is_null], hv: HV-Q2}
+      phone: {ops: [eq, in, is_null], hv: HV-Q2}
+      occupation: {ops: [eq, in, is_null], hv: HV-Q2}
+      status: {ops: [eq, in, is_null], hv: HV-Q2}
+      "clientCorporation.id": {ops: [eq, in], hv: HV-Q2}
+      "owner.id": {ops: [eq, in], hv: HV-Q2}
+  Appointment:
+    canonical_entity: appointment
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: isDeleted, nullable: false, hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    # HV-Q9b (Amendment C3-3a): the owner's parent instance has a null parentAppointment;
+    # each invitee's child copy refers to the parent. Interviews count parents only.
+    instance_filter: {field: parentAppointment, op: is_null, hv: HV-Q9b}
+    recurrence_single_record: {value: true, hv: HV-Q9}
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      dateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      subject: {ops: [eq, in, is_null], hv: HV-Q2}
+      type: {ops: [eq, in, is_null], hv: HV-Q2}
+      location: {ops: [eq, in, is_null], hv: HV-Q2}
+      dateBegin: {ops: [gte, lt, is_null], hv: HV-Q5}
+      dateEnd: {ops: [gte, lt, is_null], hv: HV-Q5}
+      "candidateReference.id": {ops: [eq, in], hv: HV-Q2}
+      "clientContactReference.id": {ops: [eq, in], hv: HV-Q2}
+      "jobOrder.id": {ops: [eq, in], hv: HV-Q2}
+      "owner.id": {ops: [eq, in], hv: HV-Q2}
+  CorporateUser:
+    canonical_entity: user
+    operation: query          # HV-Q1
+    hv: HV-Q1
+    paging: {mode: offset, max_page_size: 100, total_in_response: false, hv: HV-Q4}
+    soft_delete: {field: isDeleted, nullable: true, hv: HV-Q6}
+    sortable: {}                # HV-Q4 unresolved: no sort is supported
+    custom_fields: {ops: [eq, in, is_null], hv: HV-Q2}
+    filterable:
+      id: {ops: [eq, in], hv: HV-Q2}
+      userDateAdded: {ops: [gte, lt, is_null], hv: HV-Q5}
+      firstName: {ops: [eq, in, is_null], hv: HV-Q2}
+      lastName: {ops: [eq, in, is_null], hv: HV-Q2}
+      email: {ops: [eq, in, is_null], hv: HV-Q2}
+      status: {ops: [eq, in, is_null], hv: HV-Q2}
+
+# Status-history sources used by derivers (RAG-5, OWG-8). None is verified (HV-Q10).
+history_sources:
+  submission_status:
+    entity: JobSubmissionHistory
+    verified: false
+    reason: "dateAdded is documented as the JobSubmission's creation date, not the change time"
+    hv: HV-Q10
+  job_status:
+    entity: JobOrderEditHistory
+    verified: false
+    reason: "fieldChanges carry database column names; their mapping to API fields is undocumented"
+    hv: HV-Q10
+  candidate_status:
+    entity: null
+    verified: false
+    reason: "no Candidate history entity is documented"
+    hv: HV-Q10

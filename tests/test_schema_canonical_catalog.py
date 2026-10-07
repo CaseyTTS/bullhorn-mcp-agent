@@ -44,6 +44,7 @@ EXPECTED_FIELDS = {
         "reference_phone", "reference_title", "company_name", "status",
     ],
 }
+APPROVED_ADDITIVE_ENTITIES = {"user"}
 
 
 def _minimal() -> dict:
@@ -65,12 +66,14 @@ class TestPackagedCanonicalCatalog:
     def test_loads_via_importlib_resources(self):
         text = resources.files("bullhorn_mcp.mappings").joinpath("canonical_schema.yaml").read_text(encoding="utf-8")
         catalog = CanonicalCatalog.from_yaml_text(text)
-        assert set(catalog.entities) == set(EXPECTED_FIELDS)
+        assert set(EXPECTED_FIELDS) <= set(catalog.entities)
+        assert set(catalog.entities) - set(EXPECTED_FIELDS) == APPROVED_ADDITIVE_ENTITIES
 
     def test_exactly_the_ten_entities(self):
         catalog = load_canonical_catalog()
-        assert set(catalog.entities) == set(EXPECTED_FIELDS)
-        assert len(catalog.entities) == 10
+        assert set(EXPECTED_FIELDS) <= set(catalog.entities)
+        assert set(catalog.entities) - set(EXPECTED_FIELDS) == APPROVED_ADDITIVE_ENTITIES
+        assert len(catalog.entities) == 10 + len(APPROVED_ADDITIVE_ENTITIES)
 
     @pytest.mark.parametrize("entity", sorted(EXPECTED_FIELDS))
     def test_minimum_fields_present(self, entity):

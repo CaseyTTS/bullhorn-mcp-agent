@@ -5,10 +5,16 @@ Six tools: ``setup_status``, ``discover_schema``, ``get_mapping_profile``,
 ``manage_mapping_profile``. None of them writes to Bullhorn: the only Bullhorn
 traffic is ``GET /meta/*`` (through ``MetaDiscovery``) and the login flow.
 Every failure is returned as a bounded ``ERROR:`` string.
+
+Phase 5A: in ``shared`` mode ``setup_status`` adds an ``identity`` block (mode,
+``access_tier``, principal display, tenant hint, session state) without gaining
+a parameter (A2-4); ``local`` output is unchanged. In ``shared`` mode the connection check uses the caller's own session,
+and a ``workspace_only`` caller sees state and tier only (A2-2 / A3-2).
 """
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as _dt
 import os
 import time
@@ -20,6 +26,7 @@ from ..auth import AuthenticationError
 from ..bullhorn.client import BullhornAPIError
 from ..bullhorn.meta import MetaDiscovery
 from ..crosscutting import audit, permissions
+from ..notes import action_discovery
 from ..schema.bullhorn_catalog import load_bullhorn_catalog
 from ..schema.errors import SchemaError, describe_value, truncate_text
 from ..tenant import changes as tenant_changes
@@ -31,7 +38,9 @@ from ..tenant.revalidation import (
     load_snapshot,
     merge_snapshots,
 )
-from ..tenant.state import CREDENTIAL_ENV_VARS, ConnectionCheck, compute_setup_state
+from ..tenant.capabilities import concept_requirements
+from ..tenant.state import CREDENTIAL_ENV_VARS, ConnectionCheck, compute_setup_state, effective_states
+from ..tenant.state import SetupState  # Phase 5B (D-5B-6)
 from ..tenant.store import STORE_ENV_VAR, SetupStore, SetupStoreError, check_external_path, store_from_env, write_external_text
 from ..tenant.timeutil import format_utc, utc_now
 from ..tenant.validation import evaluate
@@ -129,6 +138,38 @@ def _check_connection() -> ConnectionCheck:
         return ConnectionCheck(ok=False, error=truncate_text(f"{type(exc).__name__}: {exc}", MAX_API_ERROR_CHARS))
 
 
+def _connection_available() -> bool:
+    """May ``setup_status`` log in? Local: the env credentials; shared: a linked or service session."""
+    from ..identity import deploy
+    from ..identity.principal import current_tier, has_bullhorn_access
+
+    if not deploy.is_shared():
+        return all((os.environ.get(n) or "").strip() for n in CREDENTIAL_ENV_VARS)
+    return has_bullhorn_access(current_tier())
+
+
+def _identity_block() -> dict[str, Any] | None:
+    """The 5A identity/session block of ``setup_status`` (never a token or a claim value beyond display)."""
+    from ..identity import deploy, sessions
+    from ..identity.principal import IdentityRequired, current_identity
+
+    if not deploy.is_shared():
+        return None
+    try:
+        ident = current_identity()
+    except IdentityRequired:
+        return {"mode": "shared", "access_tier": None, "error": "identity_required"}
+    session, expires_at = sessions.session_state(ident)
+    return {
+        "mode": "shared",
+        "access_tier": ident.access_tier,
+        "principal_display": ident.principal_display,
+        "tenant_key_hint": ident.tenant_key[:8] if ident.tenant_key else None,
+        "session": session,
+        "session_expires_at": expires_at,
+    }
+
+
 def _entity_summary(snapshot: DiscoverySnapshot, names: list[str]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     catalog = load_bullhorn_catalog()
@@ -159,7 +200,9 @@ def _entity_summary(snapshot: DiscoverySnapshot, names: list[str]) -> dict[str, 
     return out
 
 
-def _run_discovery(store: SetupStore, entities: Any) -> tuple[DiscoverySnapshot, dict[str, Any], dict[str, Any], list[str]]:
+def _run_discovery(
+    store: SetupStore, entities: Any, note_actions: bool = False
+) -> tuple[DiscoverySnapshot, dict[str, Any], dict[str, Any], list[str]]:
     """Discover (metadata only), merge into the stored snapshot, build the drift report. Writes nothing."""
     if entities is not None and (not isinstance(entities, list) or not all(isinstance(e, str) for e in entities)):
         raise SetupStoreError("entities must be a list of entity names or null")
@@ -171,6 +214,9 @@ def _run_discovery(store: SetupStore, entities: Any) -> tuple[DiscoverySnapshot,
     fingerprint = rest_url_fingerprint(client.auth.session.rest_url)
     checked_at = format_utc(_now())
     fresh = discover(MetaDiscovery(client), entities, checked_at, fingerprint)
+    if note_actions and action_discovery.NOTE_ENTITY in fresh.entities:
+        # Phase 5B (D-5B-1): per-source note-action value sets (the settings source only when verified).
+        fresh = dataclasses.replace(fresh, note_actions=action_discovery.discover_note_actions(fresh, client, checked_at))
     merged = merge_snapshots(previous, fresh)
     try:
         _, profile = _active_profile(store)
@@ -184,6 +230,43 @@ def _run_discovery(store: SetupStore, entities: Any) -> tuple[DiscoverySnapshot,
 # ---------------------------------------------------------------------- #
 # Tools
 # ---------------------------------------------------------------------- #
+
+
+def _with_requirement_details(state: SetupState) -> dict[str, Any]:
+    """Phase 5B (D-5B-6): the 4A output plus ``requirement_details`` (capability -> requirement strings).
+
+    ``missing_requirements`` and ``capabilities`` are unchanged; ``notes.create`` additionally lists
+    the A1/C2 note_action requirement while no usable note_action mapping exists.
+    """
+    data = state.to_dict()
+    details = {name: [m for m in gate.missing if not m.startswith("state:")] for name, gate in state.capabilities.items()}
+    if "notes.create" in details:
+        for item in action_discovery.note_action_requirements(os.environ):
+            if item not in details["notes.create"]:
+                details["notes.create"].append(item)
+    # Phase 5C (Amendment C3-2): concept-mapping and setting requirements of the activity.* capabilities.
+    profile, states = _active_profile_and_states()
+    for name, items in details.items():
+        if name.startswith("activity."):
+            for item in concept_requirements(name[len("activity."):], profile, states):
+                if item not in items:
+                    items.append(item)
+    data["requirement_details"] = details
+    return data
+
+
+def _active_profile_and_states() -> tuple[TenantProfileV2 | None, dict[str, str]]:
+    """The active profile and its effective record states (``(None, {})`` when unavailable). Never raises."""
+    try:
+        store = store_from_env(os.environ)
+        active = store.active_version() if store is not None else None
+        if store is None or active is None:
+            return None, {}
+        profile = store.read_version(active)
+        states, _ = effective_states(profile, store.read_discovery())
+        return profile, states
+    except (SchemaError, OSError):
+        return None, {}
 
 
 @server.mcp.tool()
@@ -202,10 +285,14 @@ def setup_status(check_connection: bool = True) -> str:
 
     def body() -> tuple[str, str]:
         connection = None
-        if check_connection is True and all((os.environ.get(n) or "").strip() for n in CREDENTIAL_ENV_VARS):
+        if check_connection is True and _connection_available():
             connection = _check_connection()
         state = compute_setup_state(os.environ, connection, now=_now())
-        return _respond(state.to_dict()), f"ok: {state.state}"
+        data = _with_requirement_details(state)
+        identity = _identity_block()
+        if identity is not None:  # shared mode only: local output stays byte-identical
+            data["identity"] = identity
+        return _respond(data), f"ok: {state.state}"
 
     return _invoke("setup_status", "read", args, body)
 
@@ -227,7 +314,7 @@ def discover_schema(entities: list[str] | None = None) -> str:
 
     def body() -> tuple[str, str]:
         store = _require_store()
-        merged, report, previous_doc, names = _run_discovery(store, entities)
+        merged, report, previous_doc, names = _run_discovery(store, entities, note_actions=True)
         drift = previous_doc.get("drift_unresolved") is True or bool(report["has_findings"])
         store.write_discovery(
             {
@@ -428,7 +515,8 @@ def manage_mapping_profile(action: str, path: str | None = None, format: str = "
             active, profile = _active_profile(store)
             if profile is None or active is None:
                 raise SetupStoreError("there is no active version to validate")
-            merged, report, previous_doc, names = _run_discovery(store, None)
+            # P5B-5: the note_actions sources are refreshed together with the Note metadata.
+            merged, report, previous_doc, names = _run_discovery(store, None, note_actions=True)
             result = evaluate(profile, merged)
             drift = bool(report["has_findings"]) or bool(result.broken)
             store.write_discovery(

@@ -2,6 +2,7 @@
 
 import httpx
 import mimetypes
+import re
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,22 @@ DEFAULT_FIELDS = {
     "ClientCorporation": "id,name,status,phone,address",
     "ClientContact": "id,firstName,lastName,email,phone,clientCorporation",
 }
+
+_ENTITY_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9]{0,63}", re.ASCII)
+
+
+def _check_entity(entity: object) -> str:
+    """Reject anything but a plain Bullhorn entity name before it reaches a URL path."""
+    if type(entity) is not str or _ENTITY_NAME_RE.fullmatch(entity) is None:
+        raise BullhornAPIError("Invalid entity name")
+    return entity
+
+
+def _check_entity_id(entity_id: object) -> int:
+    """Reject anything but an int (not bool) entity id before it reaches a URL path."""
+    if type(entity_id) is not int:
+        raise BullhornAPIError("Invalid entity id")
+    return entity_id
 
 
 class BullhornClient:
@@ -73,6 +90,7 @@ class BullhornClient:
         Returns:
             List of matching entities
         """
+        entity = _check_entity(entity)
         if fields is None:
             fields = DEFAULT_FIELDS.get(entity, "id")
 
@@ -111,6 +129,7 @@ class BullhornClient:
         Returns:
             List of matching entities
         """
+        entity = _check_entity(entity)
         if fields is None:
             fields = DEFAULT_FIELDS.get(entity, "id")
 
@@ -140,6 +159,8 @@ class BullhornClient:
         Returns:
             Entity data
         """
+        entity = _check_entity(entity)
+        entity_id = _check_entity_id(entity_id)
         if fields is None:
             fields = DEFAULT_FIELDS.get(entity, "*")
 
@@ -156,6 +177,7 @@ class BullhornClient:
         Returns:
             Entity metadata including available fields
         """
+        entity = _check_entity(entity)
         params = {"fields": "*"}
         return self._request("GET", f"/meta/{entity}", params)
 

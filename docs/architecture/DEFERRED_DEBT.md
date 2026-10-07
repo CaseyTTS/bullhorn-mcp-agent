@@ -6,6 +6,7 @@
 - **Architecture plan:** `enter-planning-mode-only-binary-cherny.md` (the user's plan directory).
 - **Phase numbers** follow the user-fixed `docs/architecture/ROADMAP.md` revision 3: 4A, 4B, 5, 6, 7, 8, 9 (ROADMAP-AMENDMENT-4). Every item's target was re-checked against that revision on 2026-10-06.
 - **Phase 4A close-out (2026-10-06).** Closures and re-targets are recorded in the section "Phase 4A close-out" near the end of this file. Where an item below names an older target, that section supersedes it.
+- **Phase 5 close-out (2026-10-07).** The section "Phase 5 close-out: open debt by target", at the end of this file, is the authoritative current summary. It supersedes the per-item targets and statuses above it.
 
 **Status values:**
 
@@ -832,7 +833,7 @@ This is critical now that 4A introduces catalog v2 and profile v2.
 
 | ID | Finding | Evidence | Target | Status |
 |---|---|---|---|---|
-| P4B-A1-1 | `setup_status` does not list the `note_action` mapping requirement under `notes.create`. It is enforced and reported only at the point of use (Amendment A1/C2). | `tenant/capabilities.py` (state-only entries) | 7 (generalize capability requirement aggregation without breaking 4A's `test_rows`) | OPEN-SCHEDULED |
+| P4B-A1-1 | `setup_status` does not list the `note_action` mapping requirement under `notes.create`. It is enforced and reported only at the point of use (Amendment A1/C2). | `tenant/capabilities.py` (state-only entries) | **5B** (D-5B-6, `requirement_details`) | **CLOSED in 5B** (5B PASS, 2026-10-07) |
 | P4B-3 | When different previews of the same payload are confirmed concurrently, the losers receive `in_doubt`, which is misleading, and their operations are consumed. Exactly one `PUT` is still made, so this is safe. | `writes/pipeline.py` (confirm path), `writes/ledger.py` | 7 (a distinct `in_progress` / `duplicate_of` status). B-3 must not make this worse. | OPEN-SCHEDULED |
 | P4B-4 | `confirm_write` does not re-run the legacy `permissions.check("create_note","write")`. §1.4 stage 7 does not require it, and the check is default-allow today. | `writes/pipeline.py` (confirm path) | 7 (re-run the whole permission stage when the policy engine is generalized) | OPEN-SCHEDULED |
 | P4B-5 | `get_notes` sends no `orderBy`, because the direction syntax is unverified (HV-B5), and it warns about this. "Last N notes" therefore has no guaranteed order. | `notes/reads.py` | 5 (verify the `orderBy` syntax under HV-1 together with `find_*` / `query_builder`) | OPEN-SCHEDULED |
@@ -855,8 +856,148 @@ This is critical now that 4A introduces catalog v2 and profile v2.
 
 | ID | Finding | Evidence | Target | Status |
 |---|---|---|---|---|
-| **P4B-8** | Secrets are redacted *before* comments are scrubbed. A comment containing a secret-like pattern (for example `password=Spring2024 …`) that a 400 body echoes back survives scrubbing, so partial comment text reaches the journal and audit (this violates D-4B-8 / B-5 clause 1). This is unreachable while HV-B11 is unresolved. **Fix:** scrub the comment from the raw body *before* redacting. **PRECONDITION: this must be CLOSED before `HV_B11_VERIFIED` is ever set to `True`.** | `bullhorn/writes.py:167` (redact) runs before `writes/pipeline.py:782` (scrub) | Precondition for EXT-1. It must be fixed in the same change that enables HV-B11, at the latest Phase 7. | OPEN-SCHEDULED (blocking for the EXT-1 enablement) |
+| **P4B-8** | Secrets were redacted *before* comments were scrubbed. A comment containing a secret-like pattern (for example `password=Spring2024 …`) that a 400 body echoed back could survive scrubbing. | `bullhorn/writes.py:167` (redact) ran before `writes/pipeline.py:782` (scrub) | **5B** (D-5B-7) | **CLOSED in 5B** (raw-body scrub before redact; AC-14..16; recorded in the HV doc). The EXT-1 precondition is satisfied. Residual encodings are tracked as P5B-1. |
 | P4B-9 | Redaction misses encodings outside the B-5 list: double-escaped JSON, HTML entities (`&quot;`), double URL-encoding (`%2522%253A`), `%20` around the separator, XML `<BhRestToken>`, and an escaped quote inside a quoted value. | `bullhorn/writes.py` (redaction helper) | 9 (security closeout; together with the P4A-10 root cause) | OPEN-SCHEDULED |
 | P4B-10 | A refresh after a 401 that fails with a non-`AuthenticationError` exception (for example `httpx.ConnectError`) maps to `in_doubt`, leaving the key stuck `pending` although no write occurred. | `writes/pipeline.py` (create/refresh exception mapping, near `:689-701`) | 7 (classify transport errors raised before send as `failed`) | OPEN-SCHEDULED |
 | P4B-11 | A `SetupStoreError` raised from `ledger.finish` or `journal.record` after a successful `PUT` makes the tool return `ERROR`: no `committed` journal line is written and the ledger stays `pending`. This is duplicate-safe, but one transition goes unjournaled. | `writes/pipeline.py:818+` | 7 (journal-after-write durability and reconciliation) | OPEN-SCHEDULED |
 | P4B-12 | In production the HV-B11 guard (stage 3) runs before the permission stage. With the scope unset, `create_note` therefore returns `rejected_validation` / `unsupported_association` rather than AC-14's literal `denied`. The `denied` path is tested with the guard off. | `writes/pipeline.py` (stage order) | Accepted: the guard order is correct, because it refuses earlier and without HTTP. Re-check AC-14 literally once EXT-1 is enabled. | CLOSED (accepted) |
+
+## Phase 5B review follow-ups (non-blocking)
+
+**Source.** The Phase 5B reviews of 2026-10-07: the Independent Reviewer returned PASS and the Security & Identity Reviewer returned FAIL.
+
+**Fixed in the 5B round, so not logged below:**
+- B-1, the `client.py` entity path traversal (blocking).
+- Sec-N2 and Sec-N4, folded into that round as local fixes.
+
+The triage is in `PHASE5B_WORK_PACKAGE.md`, "5B Review Triage".
+
+| ID | Source | Finding | Evidence | Target | Status |
+|---|---|---|---|---|---|
+| P5B-1 | Sec-N1, Ind-N3 | Comment scrubbing misses JSON-in-JSON (`\\\"`), numeric HTML entities (`&#34;`), double URL-encoding and case-changed echoes. Comments dense in special characters are recoverable. The literal AC-14 still holds. | `bullhorn/writes.py` (`scrub_text`) | 9, with P4B-9 (one normalization pass before scrubbing and redaction). **Precondition for EXT-1 enablement in 5A:** re-assess whether residual leakage is acceptable. | OPEN-SCHEDULED |
+| P5B-2 | Sec-N3, Ind-N9 | `SettingsReader` checks the size only after the full (decompressed) body has been read. Deeply nested JSON lets a `RecursionError` escape `get()` (it is caught by `settings_source`). There is no explicit timeout. | `bullhorn/settings_reader.py:63` | **Precondition for `SETTINGS_ACTION_SOURCE_VERIFIED=True`**: a streamed size cap, a recursion-safe parse and an explicit timeout. Otherwise targets 5C. The source is unreachable while the flag is `False`. | OPEN-SCHEDULED |
+| P5B-3 | Sec-N5 | An admin import keeps a file-supplied `discovery_source: settings` (a provenance claim gated by admin commit). After the Sec-N4 fix it cannot grant adoption while the flag is off. | `tenant/changes.py` (`import_document`) | 9 (import hardening, with P4A-12) | OPEN-DEFERRED |
+| P5B-4 | Ind-N4 | `reactivate_value_mapping` can create two active records for one value after an admin `set_value_mapping`. `valid_set` de-duplicates them, so there is no validation impact. | `tenant/changes.py` | 5C | OPEN-SCHEDULED |
+| P5B-5 | Ind-N5 | `manage_mapping_profile(validate)` refreshes Note meta but keeps the old `note_actions` sources, so the snapshot is inconsistent. | `tools/setup.py` (validate path) | 5C | OPEN-SCHEDULED |
+| P5B-6 | Ind-N6 | The drift report shows `settings: "unverifiable"` and an empty `source_unresolved` when note-action discovery has never run. | `tenant/revalidation.py` | 5C | OPEN-SCHEDULED |
+| P5B-7 | Ind-N8 | Any commit resets `drift_unresolved`, even when `stale_values` are present (4A semantics). | `tenant/changes.py` (commit) | 7 (with P4A-7/P4A-8 store/commit hardening) | OPEN-SCHEDULED |
+| P5B-8 | Ind-N2 | `_scrub_fragments` now also runs on transport errors that have no raw body. This is more conservative than D-5B-7's "unchanged" wording. | `bullhorn/writes.py` | Accepted (it is safer) | CLOSED |
+| P5B-9 | Ind-N1 | `ROADMAP.md` / `ARCHITECT.md` were modified during 5B. They are Architect-owned documents. | docs | Accepted | CLOSED |
+
+## Phase 5B close-out (2026-10-07)
+
+**Basis.** On re-review both the Independent Reviewer and the Security & Identity Reviewer returned PASS, with no blocking findings. The `client.py` B-1 hunk is frozen for regression case 10.
+
+**Closed by 5B:**
+- P4B-8 (scrub before redact);
+- P4B-A1-1 (`requirement_details`);
+- D-5-16 note-action setup completion;
+- B-1 (entity path traversal) fixed in a protected file under the frozen hunk.
+
+| ID | Source | Finding | Evidence | Target | Status |
+|---|---|---|---|---|---|
+| P5B-10 | Sec-N-1 | `_check_entity` / `_check_entity_id` accept `str` / `int` **subclasses**, whose `__format__` can inject a path segment. This affects Python callers only, because pydantic yields plain types. | `bullhorn/client.py` (the frozen 5B helpers) | **5A**, Amendment A1-1 (exact `type()` checks) | **CLOSED in 5A** |
+| P5B-11 | Ind-NB-1, Sec-N-4 | `note_action_drift` (via `sources.verified()`) lacks the Sec-N4 flag filter. A forged or stale `settings: verified` snapshot distorts the drift display: stale false negatives, and `settings` values appearing in `new_values`. Exploiting it requires write access to the store. | `tenant/revalidation.py` | **5A**, Amendment A1-2 | **CLOSED in 5A** |
+| P5B-12 | Ind-NB-2 | A pickled `BullhornAPIError` carries the raw body in `__dict__`. This is latent: nothing pickles errors today. | `bullhorn/writes.py` | 9 (make the raw body non-picklable, or drop it in `__reduce__`) | OPEN-DEFERRED |
+| P5B-13 | Ind-NB-3 | `NOTE_ENTITY` / `NOTE_ACTION_FIELD` constants are duplicated. | `notes/action_discovery.py:41-42` vs `tenant/profile_v2.py:78-79` | 5C (single source) | OPEN-SCHEDULED |
+| P5B-14 | Sec-N-2 | Comment scrubbing is case-sensitive, so an uppercase echo survives. Splits of 7 or fewer characters are allowed by design. | `bullhorn/writes.py` (`scrub_text`) | With P5B-1: Phase 9, plus re-assessment as a precondition for EXT-1 enablement | OPEN-SCHEDULED |
+| P5B-15 | Sec-N-3 | Pre-existing: `get_job` / `get_candidate` with `-1` / `0` issue `/entity/X/-1`. There is no traversal, only a pointless request. | `bullhorn/client.py` `get` | 9 (legacy-behaviour decision; rejecting ≤0 would change legacy outputs) | OPEN-DEFERRED |
+
+## Phase 5A close-out (2026-10-07)
+
+**Basis.** On re-review both the Independent Reviewer and the Security & Identity Reviewer returned PASS, with no blocking findings. The protected diffs are frozen for case 10. Details are in `PHASE5A_WORK_PACKAGE.md`, "5A Review Triage" and "5A Close-out".
+
+**Closed by 5A:**
+- DEBT-1 (`TrustedOriginPolicy`, with a label boundary and https);
+- OBS-1 (`auth/secrets.py`);
+- RAG-1 / NB-4 (the canonical `user` entity; its Bullhorn binding remains in 5C);
+- P5B-10 and P5B-11;
+- P4A-12 for shared mode (`exchange_dir`);
+- OWG-10 superseded by identity-derived actors.
+
+**Fixed in the 5A fix round, so not logged below:**
+- the blocking items B-1..B-4 (Sec NB-1, NB-2 and NB-3 were promoted; NB-4 was folded into B-1);
+- the local fixes L-1..L-10.
+
+| ID | Source | Finding | Evidence | Target | Status |
+|---|---|---|---|---|---|
+| P5A-1 | Builder note (A4-2) | In local mode, the legacy password-grant request URLs, which carry credentials in the query string, are logged by `httpx` at INFO. This is pre-existing. The shared-mode redaction (triage B-1) deliberately does not apply in local mode. | `auth/bullhorn_password.py` (legacy) and `httpx` logging | 9, together with P4A-10 and P4B-9 | OPEN-SCHEDULED |
+| P5A-2 | Builder note (A4-2) | HV-C10 bounded back-off is not applied to the legacy `client.py` request path, because `client.py` is frozen. | `bullhorn/client.py` `_request` | 5C covers all new reads (D-5C-12). The legacy path goes to 9, unless a legacy-behaviour decision is taken. | OPEN-SCHEDULED |
+| P5A-3 | Sec NB-9 | Errors on the legacy service path expose response bodies: `REST login failed: {status} - {response.text}` and `Invalid login response: {data}`. | `auth/bullhorn_password.py` (frozen) | 9 (the same root cause as P4A-10) | OPEN-SCHEDULED |
+| P5A-4 | Ind-1 | `connection_status` (the frozen `tools/system.py`) reports `configured: false` in shared mode, because it checks env vars. `bullhorn_session(status)` and `setup_status` are authoritative in shared mode. | `tools/system.py` | 9 (a legacy-behaviour decision) | OPEN-SCHEDULED |
+| P5A-5 | Sec NB-7 | The legacy redirect guard followed `http://` to a trusted host. | `auth/bullhorn_password.py:102-113` | **Not opened.** Triage L-7 was applied: the guard now requires `https` and a trusted host. | CLOSED (not opened) |
+| P5A-6 | Ind-3 | The service `BullhornAuth` is cached process-wide per `tenant_key`. This is accepted: there is a single non-human identity per tenant, and the cache is unreachable from any non-`service` tier. The D-5A-8 wording is clarified by the triage. | `identity/sessions.py` (`_service_auth`) | Accepted | CLOSED |
+| P5A-7 | Ind (re-review) | During the SSO verification login, an exception from `client.ping` is uncaught. The result is a 500, the pending login is consumed, and **no observation record** is written. It fails closed: no enablement. | `identity/oauth_routes.py:190-191` | **Before the EXT-2 verification run on a production tenant** (the next Builder touch of `oauth_routes.py`); at the latest, Phase 9. It must record a negative observation. | OPEN-SCHEDULED |
+| P5A-8 | Ind (re-review) | uvicorn re-applies its own log level after the `run_args` clamp. Redaction is still enforced by the record factory, and DEBUG is unsupported in shared mode. | `identity/deploy.py` (`run_args`) | 9 | OPEN-SCHEDULED |
+| P5A-9 | Sec NB-1 (re-review) | `parse_qs(max_num_fields=4)` raises `ValueError` when there are more than 4 fields, giving a 500. Nothing is consumed or leaked. | `identity/oauth_routes.py:257` | 9 (return the generic 400 page) | OPEN-SCHEDULED |
+| P5A-10 | Sec NB-2 (re-review) | Redaction misses Python dict-repr forms (`'access_token': 'X'`). The MCP SDK logs a malformed request's `input_value` at WARNING; that contains only the caller's own data. | `auth/secrets.py:110-117` | 9, together with P4B-9 (one normalized redaction pass) | OPEN-SCHEDULED |
+| P5A-11 | Sec NB-3 (re-review) | The value pattern stops at `, ' " ) ] }`, and keys are not percent-decoded (`code=REDACTED,tail`; `%63ode=...`), in the access and `httpx` logs. | `auth/secrets.py` (patterns) | 9, together with P4B-9 | OPEN-SCHEDULED |
+| P5A-12 | Sec NB-4 (re-review) | The record factory redacts exception text only through `exc_text`. Custom `formatException` / JSON formatters, `extra=` fields and `makeLogRecord` bypass it, and the `_bhmcp_redacted` flag skips the filter for `makeLogRecord` records. | `identity/deploy.py` (factory); `auth/secrets.py` | 9 (redact at the handler / formatter level as well) | OPEN-SCHEDULED |
+| P5A-13 | Sec NB-5 (re-review) | Race in the eviction of per-principal locks from the LRU: with more than 10,000 principals, an evicted lock can be re-created while it is held. | `identity/sessions.py:94-97` | 9 | OPEN-SCHEDULED |
+| P5A-14 | Sec NB-6 (re-review) | Pending logins per authenticated principal are unbounded, and pruning does `listdir` / `stat` on every `put` / `get`. This allows an authenticated DoS. | `identity/session_store.py` | 9. Suggested fix: a per-principal cap, for example 3 pending logins, plus amortized pruning. | OPEN-SCHEDULED |
+| P5A-15 | Sec NB-7 (re-review) | A `confirmation` longer than 64 characters is reported as `confirmation_required` (cosmetic). | `tools/session.py:174-178` | 9 | OPEN-SCHEDULED |
+| P5A-16 | Architect | **Pre-production gate.** P5A-10..P5A-14 are re-assessed before the first production shared deployment, even if Phase 9 has not started. | — | Before the first production shared deployment | OPEN-SCHEDULED |
+| P5A-17 | Coordinator (doc) | The `auth/trusted_origins.py` docstring is stale. It is code, so it is left for a Builder. | `auth/trusted_origins.py` | The next Builder touch of that file; at the latest, 9 | OPEN-SCHEDULED |
+
+## Phase 5C close-out (2026-10-07)
+
+**Basis.** In Round 2 both the Independent Reviewer and the Security & Identity Reviewer returned PASS, with no blocking findings. The gates are green. Details are in `PHASE5C_WORK_PACKAGE.md`: Amendments C1–C5, the "5C Review Triage" and "Round 2".
+
+**Closed by 5C:**
+- NB-2 (strict resolution);
+- RAG-1 / NB-4 (the CorporateUser binding);
+- RAG-2 and RAG-3 (reads);
+- RAG-6 (mapping-based offers);
+- RAG-7 (placement links, tenant-mapped);
+- RAG-8 remainder and P4A-11 (`tzdata`);
+- RAG-4 for the Phase 5 part;
+- P4A-2, P4A-4, P4A-5 remainder, P4A-6;
+- P5B-2, P5B-4, P5B-5, P5B-6, P5B-13;
+- P5A-2 for new reads;
+- DEBT-3, closed as not required.
+
+**Re-targeted by 5C:**
+- NB-3, NB-5, NB-17 and NB-19 go to Phase 9.
+- NB-15 is OPEN-DEFERRED: real payloads cannot be committed.
+
+**Kept open because the HV item is unresolved, failing closed in the product:**
+- RAG-5 and OWG-8 (status history, HV-Q10);
+- P4B-5 (`orderBy` direction, HV-Q4).
+
+| ID | Source | Finding | Evidence | Target | Status |
+|---|---|---|---|---|---|
+| P5C-1 | Sec N-5 / Ind N-2 (round 1) | The service tier is denied `find_records` / `get_activity` by the frozen `SERVICE_READ_TOOLS` (C4-2). | `crosscutting/permissions.py` | 6 (the Tier 2 path calls the internal services directly) | OPEN-SCHEDULED |
+| P5C-2 | Builder note (C4-3) | The C2 filter misses `httpx` / `httpcore` child loggers created after it is installed. | `bullhorn/log_scrub.py` | 9, plus the P5A-16 gate | OPEN-SCHEDULED |
+| P5C-3 | Sec N-2 (round 1), C5-1 | The frozen legacy audit records raw `where` / `query` text and legacy path-ID arguments. | `crosscutting/audit.py` (frozen) | 9, plus the P5A-16 gate | OPEN-SCHEDULED |
+| P5C-4 | Sec N-4 / Ind N-8 (round 1) | Race in the eviction of per-key semaphores from the LRU above 10,000 keys. | `bullhorn/reads.py:64-76` | 9 (with P5A-13) | OPEN-SCHEDULED |
+| P5C-5 | Ind N-8 (round 1) | `EntityReader` has no streamed response-size cap. | `bullhorn/reads.py` | 9 | OPEN-SCHEDULED |
+| P5C-6 | Ind N-6 (round 1) | The error string for an unknown setting changed; no test pins it. | `tenant/changes.py:321` | Accepted | CLOSED |
+| P5C-7 | Ind N-7 (round 1) | The test helper's name falls outside the §6 patterns. | `tests/_phase5c_helpers.py` | Accepted | CLOSED |
+| P5C-8 | C5-2 | Inactive duplicates are dropped silently when their primary is deactivated or removed. | `tenant/profile_v2.py`, `tenant/changes.py` | 7 (with P4A-7/8) | OPEN-SCHEDULED |
+| P5C-9 | Ind N-2 (round 2) | The current-state predicate is built in two places. Parity is pinned by R2-T1. | `reads/records.py:560-571`; `activity/derivers.py:230-262`; `tenant/capabilities.py:209-221` | 6 | OPEN-SCHEDULED |
+| P5C-10 | Ind N-3 (round 2) | `interview_rescheduled` is special-cased twice. | `reads/records.py:506`; `activity/derivers.py` | 6 | OPEN-SCHEDULED |
+| P5C-11 | Ind N-1 (round 2 PASS) | The choice between the `HV-Q12` and `HV-Q2` label depends on the substring `"exceeds"` (fragile). | `reads/records.py:438` | 6 | OPEN-SCHEDULED |
+| P5C-12 | Ind N-2 (round 2 PASS) | The two guards with `hv: None` are not pinned by T-5C-R2h. | `reads/records.py:282, :315` | 6 | OPEN-SCHEDULED |
+| P5C-13 | Ind N-3 (round 2 PASS) | Stale docstring. | `reads/records.py:215` | 6 | OPEN-SCHEDULED |
+| P5C-14 | Ind N-4 (round 2 PASS) | `ruff format --check` would reformat 86 files. This is not a CI gate. | repo-wide | 9 (tooling, with the mypy ratchet) | OPEN-SCHEDULED |
+| P5C-15 | Sec N-1 (round 2 PASS) | `log_scrub` leaves IDs in shapes the code never produces: %-encoded, mixed alphanumeric, `;params`, scheme-less, malformed comma lists. | `bullhorn/log_scrub.py` | 9 (with P5C-2 / P5A-12) | OPEN-SCHEDULED |
+| P5C-16 | Sec N-2 (round 2 PASS) | `cursor._derive` silently falls back to a per-process secret when the shared store has no active key. With several workers, the audit HMAC and cursors would mismatch without any warning. Mitigated by the single-worker enforcement of 5A L-5. | `reads/cursor.py` (`_derive`) | 9, plus the P5A-16 gate (fail or warn instead of falling back) | OPEN-SCHEDULED |
+| P5C-17 | Sec N-3 (round 2 PASS) | Callers with an unresolved identity are audited under `("local", "unknown")`. They are denied anyway. | `tools/records.py` (audit attribution) | 9 | OPEN-SCHEDULED |
+
+---
+
+## Phase 5 close-out: open debt by target (2026-10-07; authoritative summary)
+
+**Status.** Phase 5 (5B, 5A, 5C) is **COMPLETE: READY FOR COMMIT/PUSH**. Phase 6 has not started.
+
+**Authority.** This table supersedes all earlier per-item targets.
+
+| Target | Count | Items |
+|---|---|---|
+| **Phase 6** | 7 | RAG-4 (multi-attendee composites), P5C-1, P5C-9, P5C-10, P5C-11, P5C-12, P5C-13 |
+| **Phase 7** | 19 | RAG-2 (`update_job_priority`), OWG-2 (other scopes, `raw_query`), OWG-3, OWG-4, OWG-5, OWG-6, OWG-7, OWG-9 (also Phase 8 batch), OWG-11, P4A-1, P4A-7, P4A-8, P4A-9, P4B-3, P4B-4, P4B-10, P4B-11, P5B-7, P5C-8 |
+| **Phase 8** | 0 separate | Only OWG-9's batch part, counted under Phase 7 |
+| **Phase 9** | 35 | DEBT-2, NB-3, NB-5, NB-16 (conditional), NB-17, NB-19, P4A-10, P4A-12 (local mode), P4B-9, P5B-1, P5B-3, P5B-12, P5B-14, P5B-15, P5A-1, P5A-2 (legacy path), P5A-3, P5A-4, P5A-8, P5A-9, P5A-10, P5A-11, P5A-12, P5A-13, P5A-14, P5A-15, P5A-17, P5C-2, P5C-3, P5C-4, P5C-5, P5C-14, P5C-15, P5C-16, P5C-17 |
+| **Pre-production / external gates** | 2 | P5A-7 (before the EXT-2 verification run), P5A-16 (the pre-production gate, covering P5A-10..14, P5C-2, P5C-3 and P5C-16). Re-assessing P5B-1 / P5B-14 is also a precondition for EXT-1. |
+| **Waiting on an HV item (fails closed meanwhile)** | 4 | NB-15 (real payloads), RAG-5 / OWG-8 (HV-Q10), P4B-5 (HV-Q4) |
+| **Total open** | **67** | |

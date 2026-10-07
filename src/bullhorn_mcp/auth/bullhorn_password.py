@@ -8,6 +8,7 @@ from urllib.parse import urlencode, urlparse, parse_qs
 import httpx
 
 from ..config import BullhornConfig
+from . import trusted_origins
 
 
 @dataclass
@@ -99,7 +100,7 @@ class BullhornAuth:
                 # Check if this redirect contains the auth code
                 if "code" in query_params:
                     # Only update regional URL if redirected to a Bullhorn domain
-                    if parsed.netloc and "bullhornstaffing.com" in parsed.netloc:
+                    if parsed.netloc and trusted_origins.is_trusted_bullhorn_url(parsed):
                         self._regional_auth_url = f"{parsed.scheme}://{parsed.netloc}"
                     return query_params["code"][0]
 
@@ -110,7 +111,7 @@ class BullhornAuth:
                     raise AuthenticationError(f"OAuth error: {error} - {error_desc}")
 
                 # Only follow redirects to Bullhorn domains (regional servers)
-                if "bullhornstaffing.com" in parsed.netloc:
+                if trusted_origins.is_trusted_bullhorn_url(parsed):
                     url = location
                 else:
                     # Non-Bullhorn redirect without code - something's wrong

@@ -35,6 +35,7 @@ FORMAT = "tenant-profile/v2"
 FIELD_KINDS = ("standard", "custom")
 FIELD_SOURCES = ("standard", "discovered", "administrator")
 VALUE_SOURCES = ("discovered", "administrator")
+DISCOVERY_SOURCES = ("meta", "settings", "administrator")  # Phase 5B (D-5B-2)
 VALIDATION_STATES = ("valid", "unresolved", "broken", "unvalidated")
 VALUE_TARGET_KINDS = ("concept", "ordering")
 VALUE_TARGET_KINDS = VALUE_TARGET_KINDS + ("note_action",)  # type: ignore[assignment]  # Phase 4B (D-4B-12)
@@ -67,14 +68,25 @@ _FIELD_KEYS = frozenset(
 _VALUE_KEYS = frozenset(
     {"key", "entity", "target", "bullhorn_field", "values", "source", "active", "validation", "created_at", "updated_at"}
 )
+_VALUE_KEYS = _VALUE_KEYS | {"discovery_source"}  # Phase 5B (D-5B-2): optional, note_action records only
 _VALIDATION_KEYS = frozenset({"state", "checked_at", "detail", "values_unverified"})
 _SETTINGS_KEYS = frozenset({"reporting_timezone"})
+# Phase 5C (D-5C-15): two per-tenant answers, with no default. Closed enums.
+# ``status_history`` is accepted only once HV-Q10 verifies a submission status-history
+# source (PHASE5C_HV_VERIFICATION.md); it is unresolved, so it is rejected (Amendment C3-3).
+_SETTINGS_KEYS = _SETTINGS_KEYS | {"client_submission_dating", "interview_completion_rule"}
+SETTING_CHOICES: Mapping[str, tuple[str, ...]] = {
+    "client_submission_dating": ("status_history", "submission_date_added"),
+    "interview_completion_rule": ("mapped_state_only", "end_passed_not_cancelled"),
+}
+STATUS_HISTORY_VERIFIED = False  # HV-Q10
 
 _CONCEPTS_RESOURCE = "activity_concepts.yaml"
 _NOTE_SEMANTICS_RESOURCE = "note_action_semantics.yaml"
 # note_action value targets (Phase 4B, D-4B-12): always Note.action, a String (30) (HV-B10).
 NOTE_ACTION_ENTITY = "note"
 NOTE_ACTION_FIELD = "action"
+NOTE_ENTITY = NOTE_ACTION_ENTITY  # P5B-13: the single source (notes/action_discovery.py imports both)
 MAX_NOTE_ACTION_CHARS = 30
 
 
@@ -247,6 +259,7 @@ class ValueMappingRecord:
     validation: RecordValidation = dc_field(default_factory=lambda: RecordValidation(values_unverified=True))
     created_at: str | None = None
     updated_at: str | None = None
+    discovery_source: str | None = None  # Phase 5B (D-5B-2): absent on older records
 
     @property
     def diff_key(self) -> str:
@@ -265,6 +278,8 @@ class ValueMappingRecord:
 
     def to_dict(self) -> dict[str, Any]:
         out = self.content()
+        if self.discovery_source is not None:
+            out["discovery_source"] = self.discovery_source
         out["validation"] = self.validation.to_dict()
         out["created_at"] = self.created_at
         out["updated_at"] = self.updated_at
@@ -274,9 +289,17 @@ class ValueMappingRecord:
 @dataclass(frozen=True)
 class Settings:
     reporting_timezone: str = DEFAULT_TIMEZONE
+    # Phase 5C (D-5C-15): unset (None) until an administrator sets them; emitted only when set.
+    client_submission_dating: str | None = None
+    interview_completion_rule: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"reporting_timezone": self.reporting_timezone}
+        out: dict[str, Any] = {"reporting_timezone": self.reporting_timezone}
+        for name in SETTING_CHOICES:
+            value = getattr(self, name)
+            if value is not None:
+                out[name] = value
+        return out
 
 
 @dataclass(frozen=True)
@@ -454,15 +477,15 @@ def tagged(value: Any) -> tuple[str, Any]:
 
 
 def find_value_conflicts(records: Iterable[ValueMappingRecord]) -> list[str]:
-    """Two active concept mappings sharing one ``(bullhorn_field, value)`` are a conflict."""
-    owners: dict[tuple[str, tuple[str, Any]], str] = {}
+    """Two active concept mappings sharing one ``(entity, bullhorn_field, value)`` are a conflict (P4A-2)."""
+    owners: dict[tuple[str, str, tuple[str, Any]], str] = {}
     conflicts: list[str] = []
     reported: set[tuple[str, str, tuple[str, Any]]] = set()
     for rec in records:
         if not rec.active or rec.target.kind != "concept":
             continue
         for v in rec.values:
-            slot = (rec.bullhorn_field, tagged(v))
+            slot = (rec.entity, rec.bullhorn_field, tagged(v))
             other = owners.get(slot)
             if other is None:
                 owners[slot] = rec.key
@@ -648,11 +671,31 @@ def _parse_field_mappings(
         if len(group) < 2:
             continue
         label = f"{path_segment(entity)}.{path_segment(name)}"
-        if sum(1 for r in group if r.active) > 1:
+        active = sum(1 for r in group if r.active)
+        if active > 1:
             errors.append(f"field_mappings: more than one active record for {label}")
-        else:
+        elif active == 0:  # P4A-4: one active record plus inactive ones is allowed
             errors.append(f"field_mappings: more than one record for {label}")
-    return records
+    return active_last(records)
+
+
+def active_last(records: list[FieldMappingRecord]) -> list[FieldMappingRecord]:
+    """5C triage L-2: within each shared ``(entity, field)``, inactive records precede the active one.
+
+    Every "last record wins" lookup keyed by ``(entity, field)`` (record states, ``records_by_key``,
+    the change draft) then resolves to the active record, whatever the document order. Records
+    that do not share their ``(entity, field)`` keep their position.
+    """
+    groups: dict[tuple[str, str], list[int]] = {}
+    for i, rec in enumerate(records):
+        groups.setdefault((rec.entity, rec.field), []).append(i)
+    out = list(records)
+    for positions in groups.values():
+        if len(positions) > 1:
+            members = sorted((records[i] for i in positions), key=lambda r: r.active)  # stable: inactive first
+            for pos, rec in zip(positions, members):
+                out[pos] = rec
+    return out
 
 
 def parse_value_values(where: str, raw: Any, errors: list[str]) -> tuple[str | int, ...] | None:
@@ -796,6 +839,9 @@ def parse_value_record(
     if not isinstance(active, bool):
         errors.append(f"{vwhere}.active: must be a boolean")
         ok = False
+    discovery_source = _parse_discovery_source(vwhere, entry, target, source, errors)
+    if discovery_source is _INVALID:
+        ok = False
     validation = _parse_validation(vwhere, entry.get("validation"), errors, value_mapping=True)
     c_ok, created = _parse_timestamp(vwhere, "created_at", entry.get("created_at"), errors)
     u_ok, updated = _parse_timestamp(vwhere, "updated_at", entry.get("updated_at"), errors)
@@ -813,7 +859,29 @@ def parse_value_record(
         validation=validation,
         created_at=created,
         updated_at=updated,
+        discovery_source=discovery_source if isinstance(discovery_source, str) else None,
     )
+
+
+_INVALID = object()
+
+
+def _parse_discovery_source(where: str, entry: dict[str, Any], target: ValueTarget | None, source: Any, errors: list[str]) -> Any:
+    """Phase 5B (D-5B-2): the optional provenance of a ``note_action`` record (``_INVALID`` on error)."""
+    if "discovery_source" not in entry:
+        return None
+    value = entry["discovery_source"]
+    if not isinstance(value, str) or value not in DISCOVERY_SOURCES:
+        errors.append(f"{where}.discovery_source: {describe_value(value)} is not one of {list(DISCOVERY_SOURCES)}")
+        return _INVALID
+    if target is not None and target.kind != "note_action":
+        errors.append(f"{where}.discovery_source: only note_action mappings carry a discovery_source")
+        return _INVALID
+    expected = "administrator" if value == "administrator" else "discovered"
+    if source != expected:
+        errors.append(f"{where}.discovery_source: {value!r} requires source {expected!r}")
+        return _INVALID
+    return value
 
 
 def _parse_value_mappings(
@@ -850,7 +918,29 @@ def _parse_settings(raw: Any, errors: list[str]) -> Settings | None:
     except ValueError as exc:
         errors.append(f"settings.reporting_timezone: {truncate_text(str(exc))}")
         ok = False
-    return Settings(reporting_timezone=tz) if ok else None
+    extra: dict[str, str] = {}
+    for name in SETTING_CHOICES:
+        if name not in raw:
+            continue
+        error = setting_value_error(name, raw[name])
+        if error is not None:
+            errors.append(f"settings.{name}: {error}")
+            ok = False
+        else:
+            extra[name] = raw[name]
+    return Settings(reporting_timezone=tz, **extra) if ok else None
+
+
+def setting_value_error(name: str, value: Any) -> str | None:
+    """Phase 5C (D-5C-15): the closed-enum check of one of the new settings (``None`` when valid)."""
+    choices = SETTING_CHOICES.get(name)
+    if choices is None:
+        return f"{describe_value(name)} is not a known setting"
+    if not isinstance(value, str) or value not in choices:
+        return f"{describe_value(value)} is not one of {list(choices)}"
+    if name == "client_submission_dating" and value == "status_history" and not STATUS_HISTORY_VERIFIED:
+        return "'status_history' is not available: no submission status-history source is verified (HV-Q10)"
+    return None
 
 
 def records_by_key(profile: TenantProfileV2 | None) -> Mapping[str, dict[str, Any]]:
@@ -863,8 +953,14 @@ def records_by_key(profile: TenantProfileV2 | None) -> Mapping[str, dict[str, An
     out["meta:catalog_fingerprint"] = {"value": profile.catalog_fingerprint}
     out["meta:rest_url_fingerprint"] = {"value": profile.rest_url_fingerprint}
     out["setting:reporting_timezone"] = {"value": profile.settings.reporting_timezone}
-    for rec in profile.field_mappings:
+    for name in SETTING_CHOICES:  # Phase 5C (D-5C-15): only when set
+        value = getattr(profile.settings, name)
+        if value is not None:
+            out[f"setting:{name}"] = {"value": value}
+    for rec in active_last(list(profile.field_mappings)):  # 5C triage L-2: the active record wins
         out[rec.key] = rec.content()
     for vrec in profile.value_mappings:
         out[vrec.diff_key] = vrec.content()
+        if vrec.discovery_source is not None:  # Phase 5B (D-5B-2): reviewable provenance
+            out[vrec.diff_key]["discovery_source"] = vrec.discovery_source
     return out

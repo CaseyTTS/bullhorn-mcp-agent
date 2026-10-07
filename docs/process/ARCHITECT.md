@@ -47,3 +47,17 @@ Every work package the Architect produces for a phase should contain:
    tool behavior, including default argument values, must remain byte-for-byte unchanged").
 4. **Acceptance criteria** — a checklist, each item independently verifiable from the diff, test
    output, or a command's exit status.
+
+## Process addendum (from Phase 5, user directive 2026-10-07)
+
+The harness order is: Architect → Builder → Independent Reviewer → Security & Identity Reviewer (`SECURITY_REVIEWER.md`) → final gates.
+
+- **When both reviewers are required.** A phase must pass **both** reviewers if it touches any of these areas:
+  - authentication or authorization;
+  - sessions or identity;
+  - tenant isolation;
+  - service accounts;
+  - secrets or redirects;
+  - consequential writes.
+- **What every work package must include.** Each such work package has a "Security & Identity Review" section that names the attack items the Security & Identity Reviewer must cover.
+- **When a reviewer fails a phase.** The Architect triages the findings, the Builder fixes them, a fresh instance of each affected reviewer re-reviews, and then the gates run again.

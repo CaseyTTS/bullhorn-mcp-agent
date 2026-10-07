@@ -21,6 +21,20 @@ calling Bullhorn.
 
 Nothing here deletes or compensates. Every outcome is journaled and audited,
 and the note text never reaches the journal or the audit log (D-4B-8).
+
+Phase 5A (``shared`` mode only; ``local`` mode is unchanged):
+
+- D-5A-11: a pending write records ``{initiating_principal, tenant_key,
+  executing_bullhorn_identity}``; ``confirm_write`` by anyone else, or under a
+  changed tenant or execution identity, is ``denied`` (no cross-user confirm).
+- D-5A-14 / AC-14: the identity triple is part of the derived idempotency key
+  and is recorded in the pending file, the ledger entry and every journal line.
+- D-5A-15 / A3-4: an admin-authorized verification write lifts the HV-B11 guard
+  only for the exact authorized ``(tenant, principal, target, action)`` with no
+  associations, omits ``commentingPerson``, uses the fixed ledger key
+  ``verification:note:v1:<tenant>``, consumes the authorization exactly once and
+  records the read-back verdict. A positive verdict with an unchanged
+  ``rest_url`` fingerprint (and P4B-8 closed) enables person targets.
 """
 
 from __future__ import annotations
@@ -84,6 +98,8 @@ SUPPORTED_ASSOCIATIONS = "candidate, client_contact, and at most one job"
 HV_B11_VERIFIED = False
 NOTE_ENTITY_DEPENDENT = ("candidate", "client_contact")
 _USER_CACHE: dict[str, int] = {}
+P4B8_CLOSED = True  # Phase 5B closed P4B-8 (comment scrubbing before redaction); D-5A-15 step 3
+_IDENTITY_KEYS = ("initiating_principal", "tenant_key", "executing_bullhorn_identity")
 
 
 def atomic_write(path: Any, data: Any) -> None:
@@ -282,12 +298,72 @@ def hv_b11_available(ctx: WriteContext) -> bool:
     return HV_B11_VERIFIED and ctx.current_user is not None
 
 
-def support_errors(op: CreateNoteOp, hv_b11: bool = False) -> list[dict[str, Any]]:
-    """Unsupported target/association types (HV-B2/B3/B4/B11, D-4B-5): the whole request is rejected."""
+def _identity() -> Any:
+    """``None`` in local mode; the caller's identity context in shared mode (raises ``IdentityRequired``)."""
+    from ..identity import principal
+
+    return principal.shared_identity()
+
+
+def _triple(ident: Any) -> dict[str, Any]:
+    return dict(ident.triple()) if ident is not None else {}
+
+
+def _rest_fingerprint(ctx: WriteContext) -> str | None:
+    try:
+        check = ctx.connection()
+    except Exception:
+        return None
+    return check.rest_url_fingerprint if check.ok else None
+
+
+def verdict_enabled(ctx: WriteContext, store: SetupStore | None, ident: Any) -> bool:
+    """D-5A-15 step 3: person targets enabled by a positive, fingerprint-current verification verdict."""
+    if ident is None or store is None or not P4B8_CLOSED:
+        return False
+    from ..tenant.changes import note_write_enabled
+
+    try:
+        return note_write_enabled(store, _rest_fingerprint(ctx))
+    except SchemaError:
+        return False
+
+
+def _authorization(ctx: WriteContext, store: SetupStore | None, ident: Any, op: CreateNoteOp) -> dict[str, Any] | None:
+    """A3-4: the open admin authorization for exactly this op (shared mode, setup admin, linked session)."""
+    if ident is None or store is None or ident.access_tier != "bullhorn_user":
+        return None
+    from ..tenant.changes import find_note_authorization
+
+    if ident.tenant is None or not ident.tenant.roles.is_setup_admin(ident.principal_key):  # B-4: per tenant
+        return None
+    try:
+        return find_note_authorization(
+            store,
+            tenant_key=ident.tenant_key,
+            principal=ident.principal_key,
+            target_type=op.target_type,
+            target_id=op.target_id,
+            action_type=op.action_type,
+            has_associations=bool(op.associations),
+            now=ctx.now,
+            executing=ident.executing_bullhorn_identity,  # B-3: bound to the link it was authorized under
+        )
+    except SchemaError:
+        return None
+
+
+def support_errors(op: CreateNoteOp, hv_b11: bool = False, target_verified: bool = False) -> list[dict[str, Any]]:
+    """Unsupported target/association types (HV-B2/B3/B4/B11, D-4B-5): the whole request is rejected.
+
+    ``target_verified`` (Phase 5A): the target's NoteEntity creation was verified for this
+    tenant (D-5A-15), so only person-type *associations* stay behind the HV-B11 guard.
+    """
     errors: list[dict[str, Any]] = []
     if not hv_b11:
         # B-2: NoteEntity auto-creation needs commentingPerson, which needs HV-B11.
-        refs = [(op.target_type, op.target_id)] + [(t, i) for t, i in op.associations]
+        refs = [] if target_verified else [(op.target_type, op.target_id)]
+        refs += [(t, i) for t, i in op.associations]
         for atype, aid in refs:
             if atype in NOTE_ENTITY_DEPENDENT:
                 errors.append(
@@ -366,8 +442,8 @@ def gate_missing(ctx: WriteContext, aset: ActionTypeSet) -> list[str]:
 # ---------------------------------------------------------------------- #
 
 
-def _key_for(op: CreateNoteOp, actor: str) -> IdempotencyKey:
-    payload = {
+def _key_for(op: CreateNoteOp, actor: str, identity: Mapping[str, Any] | None = None) -> IdempotencyKey:
+    payload: dict[str, Any] = {
         "op": OPERATION,
         "target": [op.target_type, op.target_id],
         "associations": sorted([t, i] for t, i in op.associations),
@@ -375,6 +451,8 @@ def _key_for(op: CreateNoteOp, actor: str) -> IdempotencyKey:
         "comments_sha256": op.comments_sha256,
         "actor": actor,
     }
+    if identity:
+        payload["identity"] = {k: identity.get(k) for k in _IDENTITY_KEYS}  # Phase 5A (D-5A-14): shared mode only
     payload_hash = sha256_hex(tagged_json(payload))
     if op.idempotency_key is not None:
         return IdempotencyKey("caller", op.idempotency_key, payload_hash)
@@ -502,26 +580,44 @@ def _verdict_result(verdict: Verdict, correlation_id: str, cards: list[dict[str,
 
 
 def _prepare(
-    ctx: WriteContext, op: CreateNoteOp, store: SetupStore | None, actor: str, correlation_id: str
+    ctx: WriteContext,
+    op: CreateNoteOp,
+    store: SetupStore | None,
+    actor: str,
+    correlation_id: str,
+    ident: Any = None,
+    verification: Mapping[str, Any] | None = None,
 ) -> tuple[_Prepared | None, dict[str, Any] | None, ActionTypeSet]:
     """Stages 3 (network-free), 2 and 5. Returns ``(prepared, None, aset)`` or ``(None, refusal, aset)``."""
     profile, states = _load_profile(store)
     aset = valid_set(profile, states)
-    errors = support_errors(op, hv_b11_available(ctx))
+    hv_b11 = hv_b11_available(ctx)
+    verified = not hv_b11 and verification is None and verdict_enabled(ctx, store, ident)
+    if verification is not None and not hv_b11:
+        errors = support_errors(op, True)  # A3-4: exactly the authorized target, no associations
+    else:
+        errors = support_errors(op, hv_b11, target_verified=verified)
     if aset.usable:
         checked = validate(op.action_type, aset)
         if isinstance(checked, Rejection):
             errors.append(checked.to_dict())
     if errors:
         return None, _result("rejected_validation", correlation_id, errors=errors), aset
+    omit_commenting = not hv_b11 and (verification is not None or verified)  # HV-B8: defaults to the creating user
     try:
         cards = _resolve_all(ctx, op, profile, states)
-        commenting_person = _current_user_id(ctx)
+        commenting_person = None if omit_commenting else _current_user_id(ctx)
     except TargetError as exc:
         return None, _result("rejected_target", correlation_id, errors=[exc.to_dict()]), aset
     body, plan = _body_and_plan(op)
-    body["commentingPerson"] = {"id": commenting_person}
-    key = _key_for(op, actor)
+    if commenting_person is not None:
+        body["commentingPerson"] = {"id": commenting_person}
+    key = _key_for(op, actor, _triple(ident))
+    if verification is not None and ident is not None and store is not None:
+        from ..tenant.changes import note_write_generation  # L-6: one key per reset generation
+
+        generation = note_write_generation(store)
+        key = IdempotencyKey("verification", f"verification:note:v1:{ident.tenant_key}:{generation}", key.payload_hash)
     verdict = Ledger(store).lookup(key, ctx.now) if store is not None else Verdict("new")
     prep = _Prepared(op, cards, body, plan, key, verdict, ["duplicate_probe_skipped: no verified Bullhorn note query mechanism (HV-B5)"])
     return prep, None, aset
@@ -568,10 +664,15 @@ def create_note(
         store = None
     scope = check_scope(NOTE_CREATE_SCOPE, ctx.env, approving=direct)
     actor = scope.actor or ""
-    prep, refusal, aset = _prepare(ctx, op, store, actor, correlation_id)
+    ident = _identity()
+    authorization = None if direct else _authorization(ctx, store, ident, op)  # A3-4: always previewed first
+    prep, refusal, aset = _prepare(ctx, op, store, actor, correlation_id, ident, authorization)
     if refusal is not None:
         return refusal
     assert prep is not None
+    triple = _triple(ident)
+    if authorization is not None:
+        triple["verification"] = authorization.get("authorization_id")
 
     # Stage 4: permission (the legacy permissions.check runs first, in the tool).
     missing = list(scope.missing) + gate_missing(ctx, aset)
@@ -590,8 +691,8 @@ def create_note(
     core = _preview_core(prep, mode)
     phash = preview_hash(core)
     if direct:
-        journal.record(store, TOOL, "confirmed", **_journal_fields(op, actor, correlation_id, approval="direct", mode="direct"))
-        return _execute(ctx, store, prep, actor, correlation_id, operation_id=None, mode="direct")
+        journal.record(store, TOOL, "confirmed", **_journal_fields(op, actor, correlation_id, approval="direct", mode="direct", **triple))
+        return _execute(ctx, store, prep, actor, correlation_id, operation_id=None, mode="direct", identity=triple or None)
 
     operation_id = uuid.uuid4().hex
     expires_at = format_utc(ctx.now + PENDING_TTL)
@@ -605,13 +706,14 @@ def create_note(
         "created_at": format_utc(ctx.now),
         "expires_at": expires_at,
         "op": op.to_dict(),
+        **triple,
     }
     atomic_write(write_dir(store, "pending") / f"{operation_id}.json", pending)
     journal.record(
         store,
         TOOL,
         "previewed",
-        **_journal_fields(op, actor, correlation_id, operation_id=operation_id, approval="pending", mode="preview"),
+        **_journal_fields(op, actor, correlation_id, operation_id=operation_id, approval="pending", mode="preview", **triple),
     )
     return _result(
         "previewed",
@@ -653,6 +755,24 @@ def confirm_write(ctx: WriteContext, operation_id: object, preview_hash_value: o
     if pending is None or pending.get("corrupt") is True or pending.get("operation") != OPERATION:
         return _refused("unknown_operation", "unknown operation_id", None)
     correlation_id = pending.get("correlation_id") if isinstance(pending.get("correlation_id"), str) else None
+    ident = _identity()
+    if ident is not None:
+        # D-5A-11: only the initiating principal, in the same tenant and execution identity, may confirm.
+        if pending.get("initiating_principal") != ident.initiating_principal or pending.get("tenant_key") != ident.tenant_key:
+            return _result(
+                "denied",
+                correlation_id,
+                reason="not_owner",
+                errors=[_error("denied", "this preview belongs to another principal or tenant")],
+            )
+        if pending.get("executing_bullhorn_identity") != ident.executing_bullhorn_identity:
+            # 5A triage B-3: a logout + re-link (possibly another Bullhorn account) changes the label.
+            return _result(
+                "denied",
+                correlation_id,
+                reason="execution_identity_changed",
+                errors=[_error("denied", "the Bullhorn account linked to this principal changed since the preview")],
+            )
     stored_hash = pending.get("preview_hash")
     if (
         not isinstance(preview_hash_value, str)
@@ -685,17 +805,26 @@ def confirm_write(ctx: WriteContext, operation_id: object, preview_hash_value: o
         return _refused(reason, "confirm_write is not permitted: " + ", ".join(scope.missing), correlation_id,
                         missing_requirements=list(scope.missing))
     actor = scope.actor or ""
+    triple = _triple(ident)
+    authorization: dict[str, Any] | None = None
+    if ident is not None and pending.get("verification") is not None:
+        triple["verification"] = pending.get("verification")
+        authorization = _authorization(ctx, store, ident, op)
+        if authorization is None or authorization.get("authorization_id") != pending.get("verification"):
+            authorization = None
+            if decision == "approve":
+                return _refused("stale_preview", "the verification authorization is no longer open", correlation_id)
 
     if decision == "reject":
         if not exclusive_create(marker, {"decision": "reject", "actor": actor, "at": format_utc(ctx.now)}):
             return _refused("already_consumed", "this operation was already confirmed or rejected", correlation_id)
         atomic_write(path, {**pending, "status": "rejected"})
-        jf = _journal_fields(op, actor, correlation_id, operation_id=operation_id, approval="rejected")
+        jf = _journal_fields(op, actor, correlation_id, operation_id=operation_id, approval="rejected", **triple)
         journal.record(store, CONFIRM_TOOL, "rejected", **jf)
         return _result("rejected", correlation_id, operation_id=operation_id)
 
     # Re-run stages 2-5 against the current state.
-    prep, refusal, aset = _prepare(ctx, op, store, preview_actor, correlation_id)
+    prep, refusal, aset = _prepare(ctx, op, store, preview_actor, correlation_id, ident, authorization)
     if refusal is not None:
         return _refused("stale_preview", "the operation no longer validates: " + refusal["status"], correlation_id,
                         details=refusal.get("errors", []))
@@ -716,13 +845,66 @@ def confirm_write(ctx: WriteContext, operation_id: object, preview_hash_value: o
                         correlation_id, targets=prep.cards)
     if not exclusive_create(marker, {"decision": "approve", "actor": actor, "at": format_utc(ctx.now)}):
         return _refused("already_consumed", "this operation was already confirmed or rejected", correlation_id)
+    if authorization is not None:
+        from ..tenant.changes import consume_note_authorization
+
+        if not consume_note_authorization(
+            store, str(authorization.get("authorization_id")), {"operation_id": operation_id, "at": format_utc(ctx.now)}
+        ):
+            return _refused("already_consumed", "the verification authorization was already used", correlation_id)
     atomic_write(path, {**pending, "status": "consumed"})
-    jf = _journal_fields(op, actor, correlation_id, operation_id=operation_id, approval="approved")
+    jf = _journal_fields(op, actor, correlation_id, operation_id=operation_id, approval="approved", **triple)
     journal.record(store, CONFIRM_TOOL, "confirmed", **jf)
     refused = _verdict_result(prep.verdict, correlation_id, prep.cards)
     if refused is not None:  # pragma: no cover - a changed verdict is already a stale preview
         return refused
-    return _execute(ctx, store, prep, actor, correlation_id, operation_id=operation_id, mode="confirmed")
+    observed: dict[str, Any] = {}
+    result = _execute(
+        ctx, store, prep, actor, correlation_id, operation_id=operation_id, mode="confirmed", identity=triple or None, observed=observed
+    )
+    if authorization is not None and ident is not None:
+        _record_verdict(ctx, store, ident, authorization, result, observed, correlation_id)
+    return result
+
+
+def _record_verdict(
+    ctx: WriteContext,
+    store: SetupStore,
+    ident: Any,
+    authorization: Mapping[str, Any],
+    result: Mapping[str, Any],
+    observed: Mapping[str, Any],
+    correlation_id: str,
+) -> None:
+    """D-5A-15 (d): the append-only verdict of the single verification write (no note text, no tokens)."""
+    from ..tenant.changes import NOTE_WRITE_LOG, append_verification
+
+    raw = observed.get("raw")
+    associations = [a for a in result.get("associations", []) if isinstance(a, dict)]
+    target = next((a for a in associations if a.get("role") == "target"), None)
+    present = target is not None and target.get("note_entity") == "present"
+    commenting = raw.get("commentingPerson") if isinstance(raw, dict) else None
+    commenting_id = commenting.get("id") if isinstance(commenting, dict) and type(commenting.get("id")) is int else None
+    record_id = result.get("record_id")
+    append_verification(
+        store,
+        NOTE_WRITE_LOG,
+        {
+            "kind": "verdict",
+            "authorization_id": authorization.get("authorization_id"),
+            "note_id": record_id if type(record_id) is int else None,
+            "status": result.get("status"),
+            "associations": [{k: a.get(k) for k in ("type", "id", "role", "status", "note_entity")} for a in associations],
+            "note_entity_present": present,
+            "commenting_person_id": commenting_id,
+            "positive": bool(present and result.get("status") == "committed"),
+            "rest_url_fingerprint": _rest_fingerprint(ctx),
+            "principal": ident.principal_key,
+            "tenant_key": ident.tenant_key,
+            "at": format_utc(ctx.now),
+            "correlation_id": correlation_id,
+        },
+    )
 
 
 # ---------------------------------------------------------------------- #
@@ -766,11 +948,14 @@ def _execute(
     *,
     operation_id: str | None,
     mode: str,
+    identity: Mapping[str, Any] | None = None,
+    observed: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     op = prep.op
     ledger = Ledger(store)
-    jfields = _journal_fields(op, actor, correlation_id, operation_id=operation_id, mode=mode, approval=mode)
-    claim = ledger.begin(prep.key, ctx.now, operation_id=operation_id or "", correlation_id=correlation_id)
+    jfields = _journal_fields(op, actor, correlation_id, operation_id=operation_id, mode=mode, approval=mode, **(identity or {}))
+    ledger_identity = {k: identity.get(k) for k in _IDENTITY_KEYS} if identity else None
+    claim = ledger.begin(prep.key, ctx.now, operation_id=operation_id or "", correlation_id=correlation_id, identity=ledger_identity)
     if claim.status != "new" or claim.generation is None:
         refused = _verdict_result(claim, correlation_id, prep.cards)
         assert refused is not None
@@ -841,6 +1026,8 @@ def _execute(
             warnings.append("read-back returned no usable record")
     except Exception as exc:
         warnings.append("read-back failed: " + scrubbed(exc))
+    if observed is not None:
+        observed["raw"] = raw
 
     results: list[dict[str, Any]] = []
     roles = [(op.target_type, op.target_id, "target")] + [(t, i, "association") for t, i in op.associations]

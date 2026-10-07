@@ -1,0 +1,8 @@
+{
+  "_comment": "Synthetic Note.action options (D-5B-8); no tenant data.",
+  "options": [
+    {"value": "Test Action A", "label": "Test Action A"},
+    {"value": "Test Action B", "label": "Test Action B"},
+    {"value": "Test Action C", "label": "Test Action C"}
+  ]
+}

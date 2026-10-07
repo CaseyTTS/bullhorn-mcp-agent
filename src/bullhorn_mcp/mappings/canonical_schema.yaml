@@ -80,6 +80,9 @@ entities:
       salary: { type: number }
       pay_rate: { type: number }
       bill_rate: { type: number }
+      client_corporation_id: { type: reference, ref: client_corporation }
+      submission_id: { type: reference, ref: submission }
+      recruiter_id: { type: reference, ref: user, description: "Tenant-mapped recruiter credited with the placement." }
 
   client_corporation:
     description: "A hiring company."
@@ -123,6 +126,7 @@ entities:
       client_contact_id: { type: reference, ref: client_contact }
       job_id: { type: reference, ref: job }
       owner_id: { type: reference, ref: user, description: "User who owns the record." }
+      status: { type: string, description: "Tenant-configured status value." }
 
   note:
     description: "A free-text comment attached to a person or record."
@@ -158,4 +162,15 @@ entities:
       reference_phone: { type: string }
       reference_title: { type: string }
       company_name: { type: string }
+      status: { type: string, description: "Tenant-configured status value." }
+
+  user:
+    description: "A person who works in the recruiting system (recruiter, record owner, note author)."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      first_name: { type: string }
+      last_name: { type: string }
+      full_name: { type: string, description: "First and last name together." }
+      email: { type: string }
       status: { type: string, description: "Tenant-configured status value." }

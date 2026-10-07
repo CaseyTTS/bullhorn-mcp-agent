@@ -13,6 +13,7 @@ from .bullhorn.client import BullhornClient
 # patches in the existing test suite keep intercepting the same shared
 # module objects the tools/*.py modules call through.
 from .crosscutting import approval, audit, dryrun, permissions  # noqa: F401
+from .identity import deploy, sessions
 
 # Initialize MCP server
 # (explicitly annotated so mypy can resolve `server.mcp`'s type from inside
@@ -20,6 +21,7 @@ from .crosscutting import approval, audit, dryrun, permissions  # noqa: F401
 mcp: FastMCP = FastMCP(
     "Bullhorn CRM",
     instructions="Query Bullhorn CRM data - jobs, candidates, and placements",
+    **deploy.fastmcp_auth_kwargs(),
 )
 
 # Global client instance (initialized on first use)
@@ -29,6 +31,8 @@ _client: BullhornClient | None = None
 def get_client() -> BullhornClient:
     """Get or create the Bullhorn API client."""
     global _client
+    if deploy.is_shared():
+        return sessions.resolve_client()
     if _client is None:
         config = BullhornConfig.from_env()
         auth = BullhornAuth(config)
@@ -74,7 +78,7 @@ from .tools.generic import search_entities, query_entities  # noqa: F401,E402
 
 def main():
     """Run the MCP server."""
-    mcp.run()
+    mcp.run(**deploy.run_args())
 
 
 if __name__ == "__main__":

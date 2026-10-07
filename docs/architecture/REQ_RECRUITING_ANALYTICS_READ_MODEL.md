@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Recorded 2026-10-06 as a roadmap and specification requirement. On the same day it was reconciled with the operational safe-write requirement and with the user's final, fixed phase order (`ROADMAP.md` revision 3). No phase work has started. |
+| **Status** | Recorded 2026-10-06 as a roadmap and specification requirement. On the same day it was reconciled with the operational safe-write requirement and with the user's final, fixed phase order (`ROADMAP.md` revision 3). No phase work has started. **§8 (the two-tier data access model) was added on 2026-10-07 and is binding** (D-5-24). |
 | **Source** | A user requirement relayed by the coordinator on 2026-10-06, restated and merged in the user's final roadmap injection. §1 transcribes it faithfully. §2 onward is Architect analysis. |
 | **Shared vocabulary** | `CANONICAL_ACTIVITY_VOCABULARY.md` is the single definition of the activity concepts and the event shape. This document refers to it and does not redefine them. |
 | **Related** | `REQ_TENANT_SETUP_MAPPING_MANAGEMENT.md` (tenant value mappings, HV-1, CT-1, SB-1..13) and `REQ_OPERATIONAL_ACTIVITY_SAFE_WRITE.md` |
@@ -36,7 +36,7 @@
 
 **RA-7 Placements.** Each placement keeps its relationships to candidate, job, recruiter, client and date.
 
-**RA-8 Drill-back.** Every metric keeps the source Bullhorn IDs it was computed from, where applicable: candidate, job, recruiter/owner, client corporation, client contact, submission, interview/appointment, placement, and offer record/status.
+**RA-8 Drill-back.** Every metric keeps the source Bullhorn IDs it was computed from, where applicable: candidate, job, recruiter/owner, client corporation, client contact, submission, interview/appointment, placement, and offer record/status. *Tier 2 callers never receive these IDs (§8).*
 
 **RA-9 Activity concepts.**
 - The concepts are `job_created`, `client_submission`, `interview_scheduled`, `interview_completed`, `interview_cancelled`, `offer_extended`, `offer_accepted`, `offer_declined`, `placement_created` and `note_created`.
@@ -114,6 +114,8 @@ These live in the 4A profile, format v2. They are entered as **value mappings an
 
 ## 5. Drill-back requirements (binding on Phases 5 and 6)
 
+These apply to **Tier 1 only** (§8).
+
 1. Every event carries the links defined in vocabulary §1. A link is never silently omitted.
 2. Every metric returns the contributing `activity_id`s, or a re-executable handle that reproduces them. Any truncation is explicit.
 3. Every event and every metric reports the profile version and the rule that produced it.
@@ -139,3 +141,112 @@ These live in the 4A profile, format v2. They are entered as **value mappings an
 ## 7. Non-goals
 
 This document makes no source changes and no test changes, starts no phase work, and does not cover a dashboard UI.
+
+---
+
+## 8. Two-tier data access model (binding; D-5-24; the single source)
+
+**Status.** This is a user requirement of 2026-10-07. It is **binding for 5C** (record-level tier gating) and for **Phase 6** (the Tier 2 aggregate interface and de-identification). 5A provides only the identity hook (`PHASE5A_WORK_PACKAGE.md` Amendment A2).
+
+**Single source.** Other documents reference this section and must not restate it.
+
+### 8.1 Tiers (TT-1)
+
+| Tier | Who | May receive |
+|---|---|---|
+| **Tier 1, `bullhorn_user`** | An authenticated workspace principal **with a valid linked Bullhorn session** (5A) | Record-level and aggregate Bullhorn data, according to their own Bullhorn permissions and MCP policy: candidates, jobs, submissions, interviews, notes, placements, clients, and approved writes |
+| **Tier 2, `workspace_only`** | An authenticated workspace principal **without** a valid linked Bullhorn session | **Only** approved, de-identified aggregate, historical or statistical results, computed through the read-only service identity |
+
+**Tier derivation (TT-2).**
+- The tier comes **only** from the authenticated identity context (5A), never from tool arguments or the model.
+- A Bullhorn session that is linked but expired or invalid means `workspace_only` until the user re-links.
+- Service principals and local-mode callers are separate modes. They are not Tier 2 users.
+
+### 8.2 What Tier 2 may and must never receive
+
+**May receive (TT-3).** Only metrics and dimensions that the admin has approved:
+- historical job counts and trends;
+- jobs by broad geography (state, metro or region);
+- job family and type statistics;
+- counts of submissions, interviews, offers and placements;
+- funnel and conversion rates;
+- time-to-submit and time-to-fill;
+- aggregate operational throughput;
+- anonymized client concentration, industry and segment statistics;
+- other admin-approved aggregate business metrics.
+
+**Must never receive (TT-4):**
+- candidate names or any identifying candidate information;
+- resumes or contact information;
+- candidate-level histories or notes;
+- candidate IDs or any record-level drill-down;
+- named client companies;
+- client-contact information;
+- raw submission, interview or placement records;
+- raw Bullhorn search or query capability;
+- exact addresses;
+- source or provenance IDs that could reconstruct restricted records.
+
+**Service-identity boundary (TT-5).**
+- The service identity may read underlying records **internally** to compute an approved metric.
+- Tier 2 receives **only** the policy-filtered aggregate.
+- Authorization and de-identification happen in the server **before** anything is returned to the model. The system never relies on prompting the LLM.
+- Tier 2 output is validated against a **Tier 2 output schema allowlist**: aggregate values, the dimension labels from approved levels, `suppressed` flags and metric metadata. Anything else is rejected before return.
+
+### 8.3 Tool availability by tier (TT-6)
+
+| Tools | Tier 1 | Tier 2 |
+|---|---|---|
+| Legacy 10, `find_records`, `get_activity`, `get_notes`, `create_note`, `confirm_write`, `search_entities`, `query_entities` | yes (per policy) | **denied** (`bullhorn_auth_required`), with zero Bullhorn calls and no service fallback |
+| `get_recruiting_metrics` (Phase 6) | yes, full (with drill-back) | **yes**, the primary Tier 2 interface; tier enforced automatically |
+| `bullhorn_session` | yes | yes (so the user can link their Bullhorn account) |
+| `setup_status` | yes | yes (status only, no record data) |
+| Setup / admin tools | admin role only | admin role only |
+
+**Parameter manipulation (TT-7).** The permission layer must make it impossible for a Tier 2 caller to obtain raw records by manipulating tool parameters. For example, `get_recruiting_metrics` with a filter narrowed to one record, `group_by` set to an ID or name, or a request for drill-back must not leak record data.
+
+### 8.4 Re-identification controls (TT-8; implemented in Phase 6)
+
+1. **Allowlisted metrics and dimensions only.** Tier 2 queries are composed from an admin-approved metric × dimension × time-bucket catalog. There are no free-form filters, no record-level dimensions, and no `group_by` on any identifier, name, or exact or free-text field.
+2. **Minimum cohort threshold `k`.** It is configurable per tenant, with a conservative default. A result cell with a cohort ≥ `k` is allowed. A cell below `k` is **suppressed** with `insufficient_aggregate_population`.
+   - **Complementary suppression** is applied, so a suppressed cell cannot be recovered from totals or margins.
+   - A separate client-level threshold `k_client` applies to any client-segment statistic.
+3. **Differencing and repeated-query defences.**
+   - **Overlap check.** For each tenant, the server records the cohort definitions of answered Tier 2 queries for a window. A query whose cohort differs from an answered query's cohort by fewer than `k` members is refused or suppressed.
+   - **Coarsening.** Time buckets have a minimum width, and geography is limited to approved levels.
+   - **Rounding.** Counts and rates are rounded or bucketed as configured.
+   - **Budget.** There is a per-principal query budget, with an audit trail.
+4. **Geography.** Only the approved aggregation levels: state, metro and region. They are derived server-side from approved mappings. City, ZIP, address and coordinates are never returned to Tier 2.
+5. **Clients.** Results are reported only as anonymous categories, industries or segments, or as concentration percentages, with a **dominance rule**: a segment in which a single client exceeds a configured share is suppressed. Company names and IDs are never returned.
+6. **Provenance.** Tier 2 results carry the metric definition version and the policy version, and **no** source IDs or `activity_id`s.
+
+### 8.5 Phase ownership
+
+| Phase | Delivers |
+|---|---|
+| **5A** | The identity hook only: `access_tier` in the identity context, and fail-closed record-level access for `workspace_only` with no service fallback (Amendment A2). No analytics logic. |
+| **5C** | TT-6 gating for `find_records` / `get_activity` and for every record-level tool, with Security & Identity tests. No Tier 2 metrics. |
+| **Phase 6** | `get_recruiting_metrics` with TT-3..TT-8: the metric/dimension catalog, `k` / `k_client` thresholds, complementary suppression, differencing defences, geography and client anonymization, the Tier 2 output schema allowlist, and the service-identity internal computation path. |
+
+### 8.6 Security & Identity Reviewer blocking tests (Phase 6, plus 5C for gating)
+
+The reviewer must attack each of these:
+- candidate re-identification;
+- client re-identification;
+- cohort-threshold bypass, including via complements and margins;
+- repeated-query and differencing attacks;
+- requests for restricted IDs or provenance;
+- overly precise geographic queries;
+- service-identity raw-data leakage;
+- non-Bullhorn (Tier 2) users invoking record-level tools;
+- parameter manipulation to obtain raw records.
+
+### 8.7 Open questions (Phase 6 work package)
+
+| ID | Question |
+|---|---|
+| Q-T1 | The default `k` (proposed: 10) and `k_client` (proposed: 5). |
+| Q-T2 | The dominance threshold (proposed: suppress a segment where one client is more than 50% of the segment). |
+| Q-T3 | The source of the metro and region definitions. |
+| Q-T4 | The initial approved Tier 2 metric catalog. |
+| Q-T5 | The differencing-history retention window and the query budget. |

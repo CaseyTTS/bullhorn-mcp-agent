@@ -19,9 +19,11 @@ Verified mechanisms only (``docs/architecture/PHASE4B_HV_VERIFICATION.md``):
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 from typing import Any
+from urllib.parse import quote, quote_plus
 
 import httpx
 
@@ -50,6 +52,56 @@ _SECRET_RUN_RE = re.compile(r"(?i)(" + _SECRET_NAMES + r")(\W{0,5})([A-Za-z0-9._
 
 class WriteOutcomeUnknown(BullhornAPIError):
     """Bullhorn answered 200 but the body is not a JSON object: the write may have happened (B-4)."""
+
+
+# Phase 5B (D-5B-7, P4B-8): the raw error body of a non-200 response is kept in this private,
+# non-rendered attribute. It is never part of ``str()`` / ``repr()`` / ``args``; only
+# ``safe_error_text`` reads it, and it scrubs the comment text before redacting secrets.
+_RAW_BODY_ATTR = "_bullhorn_raw_error_body"
+FRAGMENT_CHARS = 8
+
+
+def _api_error(status: int, body: str) -> BullhornAPIError:
+    exc = BullhornAPIError(f"API request failed: {status}")
+    setattr(exc, _RAW_BODY_ATTR, body[:MAX_ERROR_BODY_CHARS])
+    return exc
+
+
+def raw_error_body(exc: BaseException | str) -> str | None:
+    """The private raw body of an ``EntityWriter`` error (``None`` when there is none)."""
+    body = getattr(exc, _RAW_BODY_ATTR, None) if isinstance(exc, BaseException) else None
+    return body if isinstance(body, str) else None
+
+
+def _scrub_fragments(text: str, secret: str | None) -> str:
+    """Replace every run of text that contains a ``FRAGMENT_CHARS``-character piece of ``secret`` (B-5, AC-14)."""
+    if not secret:
+        return text
+    grams: set[str] = set()
+    encoded = [quote(secret, safe=""), quote_plus(secret, safe=""), html.escape(secret)]  # URL- and HTML-encoded echoes
+    for variant in dict.fromkeys(_variants(secret) + encoded):
+        grams.update(variant[i : i + FRAGMENT_CHARS] for i in range(len(variant) - FRAGMENT_CHARS + 1))
+    if not grams:
+        return text
+    marker = "<comments:" + hashlib.sha256(secret.encode("utf-8", "surrogatepass")).hexdigest()[:12] + ">"
+    covered = [False] * len(text)
+    for i in range(len(text) - FRAGMENT_CHARS + 1):
+        if text[i : i + FRAGMENT_CHARS] in grams:
+            for k in range(i, i + FRAGMENT_CHARS):
+                covered[k] = True
+    if not any(covered):
+        return text
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        if covered[i]:
+            while i < len(text) and covered[i]:
+                i += 1
+            out.append(marker)
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
 
 
 def _redact_values(text: str) -> str:
@@ -117,9 +169,15 @@ def safe_error_text(exc: BaseException | str, limit: int = MAX_ERROR_CHARS, scru
     """A bounded, redacted description of an error (never the raw exception).
 
     ``scrub`` (the note text) is removed before anything is cut, so no partial echo survives.
+    D-5B-7: (1) the raw error body, when present; (2) scrub the note text (whole, each line of
+    8+ characters, and any 8+ character fragment); (3) redact secrets; (4) bound.
     """
     raw = exc if isinstance(exc, str) else f"{type(exc).__name__}: {exc}"
+    body = raw_error_body(exc)
+    if body is not None:
+        raw = f"{raw} - {body}"
     raw = scrub_text(raw[: MAX_ERROR_BODY_CHARS + 1000], scrub)
+    raw = _scrub_fragments(raw, scrub)
     # Redact before and after truncation so a cut can never expose a partial secret.
     return redact_secrets(truncate_text(redact_secrets(raw), limit))
 
@@ -163,8 +221,8 @@ class EntityWriter:
                     method, f"{session.rest_url}{path}", params=params, json=body, headers={"BhRestToken": session.bh_rest_token}
                 )
         if response.status_code != 200:
-            # Redacted but not cut: callers scrub the note text first, then bound it (safe_error_text).
-            raise BullhornAPIError(redact_secrets(f"API request failed: {response.status_code} - {response.text[:MAX_ERROR_BODY_CHARS]}"))
+            # D-5B-7: the body is private; safe_error_text scrubs the note text, then redacts, then bounds.
+            raise _api_error(response.status_code, response.text)
         try:
             data = response.json()
         except ValueError:

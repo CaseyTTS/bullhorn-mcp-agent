@@ -92,21 +92,85 @@ class EntitySnapshot:
         }
 
 
+NOTE_ACTION_SOURCES = ("meta", "settings")  # discovery sources, in order (D-5B-1)
+NOTE_ACTION_SOURCE_STATUSES = ("verified", "unverifiable", "unresolved")
+MAX_NOTE_ACTION_VALUES = 500
+MAX_NOTE_ACTION_VALUE_CHARS = 200
+
+
+@dataclass(frozen=True)
+class NoteActionSource:
+    """One discovery source of note action values (Phase 5B, D-5B-1).
+
+    ``verified``: ``values`` is the source's complete value set. ``unverifiable``:
+    the source was consulted but gave no usable set (``warning`` says why).
+    ``unresolved``: the source is switched off (HV unresolved) and was never called.
+    """
+
+    status: str
+    values: tuple[str, ...] = ()
+    warning: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"status": self.status, "values": list(self.values), "warning": self.warning}
+
+
+@dataclass(frozen=True)
+class NoteActionSources:
+    checked_at: str
+    sources: Mapping[str, NoteActionSource] = field(default_factory=dict)
+
+    def verified(self) -> dict[str, tuple[str, ...]]:
+        """``{source: values}`` of the verified sources, in source order."""
+        return {
+            n: self.sources[n].values
+            for n in NOTE_ACTION_SOURCES
+            if n in self.sources and self.sources[n].status == "verified"
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"checked_at": self.checked_at, "sources": {n: s.to_dict() for n, s in self.sources.items()}}
+
+
+def _note_actions_from_dict(data: Any) -> NoteActionSources:
+    if not isinstance(data, dict) or not isinstance(data["sources"], dict):
+        raise TypeError("note_actions must be an object")
+    sources: dict[str, NoteActionSource] = {}
+    for name, body in data["sources"].items():
+        if name not in NOTE_ACTION_SOURCES or not isinstance(body, dict):
+            raise ValueError("bad note action source")
+        status = body["status"]
+        values = body["values"]
+        if status not in NOTE_ACTION_SOURCE_STATUSES or not isinstance(values, list) or len(values) > MAX_NOTE_ACTION_VALUES:
+            raise ValueError("bad note action source")
+        if not all(isinstance(v, str) and 0 < len(v) <= MAX_NOTE_ACTION_VALUE_CHARS for v in values):
+            raise ValueError("bad note action value")
+        if status != "verified" and values:
+            raise ValueError("only a verified source carries values")
+        sources[name] = NoteActionSource(status=status, values=tuple(values), warning=_opt_str(body["warning"]))
+    return NoteActionSources(checked_at=_req_str(data["checked_at"]), sources=sources)
+
+
 @dataclass(frozen=True)
 class DiscoverySnapshot:
     checked_at: str
     rest_url_fingerprint: str | None
     entities: Mapping[str, EntitySnapshot]  # keyed by canonical entity
+    # Phase 5B (D-5B-5): per-source note-action value sets; absent on older snapshots.
+    note_actions: NoteActionSources | None = None
 
     def entity(self, canonical: str) -> EntitySnapshot | None:
         return self.entities.get(canonical)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "checked_at": self.checked_at,
             "rest_url_fingerprint": self.rest_url_fingerprint,
             "entities": {name: e.to_dict() for name, e in self.entities.items()},
         }
+        if self.note_actions is not None:
+            out["note_actions"] = self.note_actions.to_dict()
+        return out
 
     @classmethod
     def from_dict(cls, data: Any) -> DiscoverySnapshot:
@@ -176,10 +240,12 @@ def _snapshot_from_dict(data: Any) -> DiscoverySnapshot:
             meta_unusable=_req_bool(body["meta_unusable"]),
         )
     rest_fp = data.get("rest_url_fingerprint")
+    note_actions = data.get("note_actions")
     return DiscoverySnapshot(
         checked_at=_req_str(data["checked_at"]),
         rest_url_fingerprint=_opt_str(rest_fp),
         entities=entities,
+        note_actions=None if note_actions is None else _note_actions_from_dict(note_actions),
     )
 
 
@@ -327,6 +393,8 @@ def merge_snapshots(previous: DiscoverySnapshot | None, current: DiscoverySnapsh
         checked_at=current.checked_at,
         rest_url_fingerprint=current.rest_url_fingerprint,
         entities=entities,
+        # Phase 5B: note-action sources not rediscovered keep their previous snapshot.
+        note_actions=current.note_actions if current.note_actions is not None else (previous.note_actions if previous else None),
     )
 
 
@@ -422,6 +490,7 @@ def build_drift_report(
                 if bullhorn.is_custom_field(name) and name not in mapped_sources and name not in prev.fields:
                     newly_unmapped.append({"entity": canon, "field": name})
 
+    note_drift = note_action_drift(current.note_actions, profile)
     findings = bool(
         new_fields
         or removed_fields
@@ -432,6 +501,8 @@ def build_drift_report(
         or errors
         or any(d["status"] == "drift" for d in value_drift)
     )
+    # Phase 5B (D-5B-5): stale note actions are an unresolved finding; nothing is remapped.
+    findings = findings or bool(note_drift["stale_values"])
     return {
         "checked_at": current.checked_at,
         "has_findings": findings,
@@ -443,4 +514,65 @@ def build_drift_report(
         "value_drift": _cap(value_drift),
         "meta_unusable": _cap(meta_unusable),
         "errors": _cap(errors),
+        "note_action_drift": note_drift,
     }
+
+
+def note_action_drift(sources: NoteActionSources | None, profile: TenantProfileV2 | None) -> dict[str, Any]:
+    """Compare the mapped note actions with the verified discovery sources (D-5B-5). Never mutates.
+
+    ``new_values``: in a verified source, not mapped by any note_action record.
+    ``stale_values``: mapped by an active record, absent from every verified source.
+    ``reactivatable``: mapped only by deactivated records, present in a verified source
+    (``reactivatable_keys`` are those records). ``unverifiable``: mapped and active,
+    but no verified source is available. Values compare as exact strings.
+    """
+    verified = sources.verified() if sources is not None else {}
+    statuses = {
+        n: (sources.sources[n].status if sources is not None and n in sources.sources else "unverifiable")
+        for n in NOTE_ACTION_SOURCES
+    }
+    # Amendment A1-2 (P5B-11): the settings source is absent while it is unverified,
+    # whatever a (possibly forged or stale) snapshot claims.
+    from ..notes import action_discovery  # local import: notes.action_discovery imports the tenant package
+
+    if not action_discovery.SETTINGS_ACTION_SOURCE_VERIFIED:
+        verified = {n: v for n, v in verified.items() if n != "settings"}
+        if statuses.get("settings") == "verified":
+            statuses["settings"] = "unresolved"
+    if sources is None:  # P5B-6: note-action discovery has never run; the settings source was not consulted
+        statuses["settings"] = "not_run"
+    discovered: dict[str, None] = {}
+    for values in verified.values():
+        discovered.update(dict.fromkeys(values))
+    active: dict[str, None] = {}
+    inactive: dict[str, list[str]] = {}
+    for rec in profile.value_mappings if profile is not None else ():
+        if rec.target.kind != "note_action":
+            continue
+        for v in rec.values:
+            if not isinstance(v, str):
+                continue
+            if rec.active:
+                active[v] = None
+            else:
+                inactive.setdefault(v, []).append(rec.key)
+    mapped = set(active) | set(inactive)
+    reactivatable = [v for v in inactive if v not in active and v in discovered]
+    lists: dict[str, list[str]] = {
+        "new_values": [v for v in discovered if v not in mapped],
+        "stale_values": [v for v in active if v not in discovered] if verified else [],
+        "reactivatable": reactivatable,
+        "reactivatable_keys": list(dict.fromkeys(k for v in reactivatable for k in inactive[v])),
+        "unverifiable": [] if verified else list(active),
+    }
+    out: dict[str, Any] = {
+        "sources": statuses,
+        "source_unresolved": [n for n, st in statuses.items() if st in ("unresolved", "not_run")],
+        "warnings": {n: s.warning for n, s in (sources.sources.items() if sources is not None else ()) if s.warning},
+    }
+    for name, items in lists.items():
+        out[name] = items[:MAX_REPORT_ITEMS]
+        if len(items) > MAX_REPORT_ITEMS:
+            out[f"{name}_truncated"] = len(items) - MAX_REPORT_ITEMS
+    return out

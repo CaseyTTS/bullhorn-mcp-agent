@@ -123,6 +123,18 @@ def effective_states(profile: TenantProfileV2, discovery_doc: Mapping[str, Any] 
     return states, None
 
 
+def _shared_row1() -> list[str] | None:
+    """``None`` in local mode. Shared mode (A3-2): row 1 holds only for a ``bullhorn_user``
+    or ``service`` caller; the credential environment variables are ignored."""
+    from ..identity import deploy
+
+    if not deploy.is_shared():
+        return None
+    from ..identity.principal import current_tier, has_bullhorn_access
+
+    return [] if has_bullhorn_access(current_tier()) else ["bullhorn_session"]
+
+
 def compute_setup_state(
     env: Mapping[str, str] | None = None,
     connection: ConnectionCheck | None = None,
@@ -135,8 +147,12 @@ def compute_setup_state(
     now = now or utc_now()
     checked = connection is not None
 
-    # Row 1
-    missing = [f"env:{name}" for name in CREDENTIAL_ENV_VARS if not (env.get(name) or "").strip()]
+    # Row 1 (Amendment A3-2: in shared mode the caller's session, not the environment)
+    shared_missing = _shared_row1()
+    if shared_missing is not None:
+        missing = shared_missing
+    else:
+        missing = [f"env:{name}" for name in CREDENTIAL_ENV_VARS if not (env.get(name) or "").strip()]
     if missing:
         return _result("disconnected", missing, connection_checked=checked)
     if connection is not None and not connection.ok:

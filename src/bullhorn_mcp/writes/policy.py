@@ -11,6 +11,10 @@
 
 ``crosscutting/permissions.py`` is not changed; its ``check`` is still called
 first by the tools.
+
+Phase 5A (D-5A-10): in ``shared`` mode the actor is the caller's principal
+(``tenant/actor.py``) and the approver list is the admin config's
+``roles.write_approvers``; the identity environment variables are ignored.
 """
 
 from __future__ import annotations
@@ -55,6 +59,23 @@ def write_actor(env: Mapping[str, str] | None = None) -> tuple[str | None, str |
     return resolution.actor, resolution.reason
 
 
+def _approvers(env: Mapping[str, str]) -> tuple[frozenset[str], str]:
+    """``(approver list, its name)``: the admin config's roles in shared mode, else the env list."""
+    from ..identity import deploy
+
+    if deploy.is_shared():
+        from ..identity.principal import IdentityRequired, current_identity
+
+        try:
+            tenant = current_identity().tenant
+        except IdentityRequired:
+            tenant = None
+        # B-4: the selected tenant's approvers; without a tenant nobody can approve (fail closed).
+        approvers = tenant.roles.write_approvers if tenant is not None else frozenset({"<no tenant>"})
+        return approvers, "roles.write_approvers"
+    return _csv(env.get(APPROVERS_ENV_VAR, "")), APPROVERS_ENV_VAR
+
+
 def check_scope(scope: str, env: Mapping[str, str] | None = None, *, approving: bool = False) -> ScopeDecision:
     """Is ``scope`` enabled, and is there an (allowed) actor? Never raises."""
     env = _env(env)
@@ -65,9 +86,9 @@ def check_scope(scope: str, env: Mapping[str, str] | None = None, *, approving: 
     if actor is None:
         missing.append(f"env:{ACTOR_ENV_VAR}")
     elif approving:
-        approvers = _csv(env.get(APPROVERS_ENV_VAR, ""))
+        approvers, source = _approvers(env)
         if approvers and actor not in approvers:
-            missing.append(f"approver:{APPROVERS_ENV_VAR}")
+            missing.append(f"approver:{source}")
     return ScopeDecision(not missing, actor, tuple(missing))
 
 

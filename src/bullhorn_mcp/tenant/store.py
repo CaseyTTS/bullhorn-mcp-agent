@@ -10,6 +10,10 @@ Layout::
 
 Every ``OSError`` (and every decoding problem) becomes a bounded
 ``SetupStoreError``; every YAML read goes through ``yaml_strict``.
+
+Phase 5A (D-5A-13/14): in ``shared`` mode the store is the caller's tenant's
+``setup_store`` from the admin config (``BULLHORN_SETUP_STORE`` is ignored), and
+import/export paths must resolve inside that tenant's ``exchange_dir``.
 """
 
 from __future__ import annotations
@@ -46,8 +50,28 @@ def _os_message(action: str, exc: BaseException) -> str:
     return f"setup store: could not {action}: {truncate_text(str(detail), 200)}"
 
 
+def _shared_tenant() -> Any:
+    """``None`` in local mode; the caller's ``TenantConfig`` in shared mode (fails closed)."""
+    from ..identity import deploy
+
+    if not deploy.is_shared():
+        return None
+    from ..identity.principal import IdentityRequired, current_identity
+
+    try:
+        tenant = current_identity().tenant
+    except IdentityRequired:
+        raise SetupStoreError("setup store: identity_required") from None
+    if tenant is None:
+        raise SetupStoreError("setup store: identity_required")
+    return tenant
+
+
 def store_from_env(env: Mapping[str, str] | None = None) -> SetupStore | None:
     """The configured store, or ``None`` when ``BULLHORN_SETUP_STORE`` is unset/blank."""
+    tenant = _shared_tenant()
+    if tenant is not None:
+        return SetupStore(tenant.setup_store)
     env = os.environ if env is None else env
     raw = env.get(STORE_ENV_VAR, "")
     value = raw.strip() if isinstance(raw, str) else ""
@@ -347,6 +371,10 @@ def check_external_path(raw: object, store_root: Path | None, *, for_write: bool
     candidate = Path(raw.strip()).expanduser()
     if candidate.suffix.lower() not in EXTERNAL_SUFFIXES:
         raise SetupStoreError("path must end in .yaml or .yml")
+    tenant = _shared_tenant()
+    if tenant is not None and not is_within(Path(os.path.abspath(candidate)), Path(os.path.abspath(tenant.exchange_dir))):
+        # Lexical pre-check (shared mode): nothing outside the exchange directory is even probed.
+        raise SetupStoreError("path must be inside the tenant exchange directory (shared mode)")
     try:
         if for_write:
             if candidate.is_symlink() or candidate.exists():
@@ -367,6 +395,13 @@ def check_external_path(raw: object, store_root: Path | None, *, for_write: bool
         raise SetupStoreError(_os_message("resolve the path", exc)) from exc
     if store_root is not None and is_within(resolved, store_root):
         raise SetupStoreError("path must not be inside the setup store")
+    if tenant is not None:
+        try:
+            exchange = Path(tenant.exchange_dir).resolve(strict=True)
+        except (OSError, RuntimeError):
+            raise SetupStoreError("the tenant exchange directory is not available") from None
+        if not is_within(resolved, exchange) or resolved == exchange:
+            raise SetupStoreError("path must be inside the tenant exchange directory (shared mode)")
     return resolved
 
 

@@ -1,8 +1,11 @@
 """UTC time primitives for tenant setup (D-4A-11).
 
 ``coerce_epoch_millis_to_utc_iso`` converts a Bullhorn ``Timestamp`` value
-(UNIX epoch milliseconds; HV-A3) into an ISO-8601 UTC string. Conversion into
-the tenant's reporting timezone is Phase 5 and is not done here.
+(UNIX epoch milliseconds; HV-A3) into an ISO-8601 UTC string.
+
+Phase 5C (D-5C-9): ``parse_bound`` (moved here from ``notes/reads.py``) is the
+single date-bound parser, and ``epoch_millis_to_local_iso`` renders a timestamp
+in the tenant's reporting timezone. ``tzdata`` is a runtime dependency.
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 import datetime as _dt
 import re
 import zoneinfo
+from collections.abc import Callable
 
 from ..schema.errors import describe_value
 
@@ -64,6 +68,73 @@ def validate_timezone(name: object) -> str:
     except (zoneinfo.ZoneInfoNotFoundError, ValueError, OSError, TypeError, LookupError) as exc:
         raise ValueError(f"unknown timezone {describe_value(name)} ({type(exc).__name__})") from None
     return name
+
+
+# ---------------------------------------------------------------------- #
+# Date bounds (D-4B-15, D-5C-9): the single parser
+# ---------------------------------------------------------------------- #
+
+_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
+_DATETIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})?", re.ASCII)
+_MS = _dt.timedelta(milliseconds=1)
+
+
+class FilterError(ValueError):
+    """A filter value is invalid. The message is bounded."""
+
+
+def resolve_zone(name: str) -> _dt.tzinfo:
+    """The reporting timezone (``UTC`` needs no tz database)."""
+    if name == "UTC":
+        return _dt.timezone.utc
+    return zoneinfo.ZoneInfo(name)
+
+
+def _ceil_ms(moment: _dt.datetime) -> int:
+    delta = moment - _EPOCH
+    whole = delta // _MS
+    return whole if delta == whole * _MS else whole + 1
+
+
+def parse_bound(
+    value: object, name: str, timezone_name: str, zone: Callable[[str], _dt.tzinfo] | None = None
+) -> int:
+    """ISO-8601 date or datetime -> epoch milliseconds (D-4B-15, D-5C-9).
+
+    - A date-only value is midnight in the tenant reporting timezone (``fold=0``
+      for an ambiguous or nonexistent local time).
+    - A datetime needs an explicit offset (or ``Z``); a naive datetime is rejected.
+    - Sub-millisecond values round up, so ``[from, to)`` holds exactly for integer
+      millisecond timestamps.
+
+    ``zone`` resolves the timezone name (default ``resolve_zone``).
+    """
+    if not isinstance(value, str) or len(value) > 40:
+        raise FilterError(f"{name} must be an ISO-8601 date or datetime string, got {describe_value(value)}")
+    try:
+        if _DATE_RE.fullmatch(value):
+            day = _dt.date.fromisoformat(value)
+            moment = _dt.datetime(day.year, day.month, day.day, tzinfo=(zone or resolve_zone)(timezone_name))
+        else:
+            m = _DATETIME_RE.fullmatch(value)
+            if m is None:
+                raise FilterError(f"{name} must be an ISO-8601 date or datetime, got {describe_value(value)}")
+            if m.group(1) is None:
+                raise FilterError(f"{name}: a datetime without a UTC offset is not accepted, got {describe_value(value)}")
+            text = value[:-1] + "+00:00" if value.endswith("Z") else value
+            moment = _dt.datetime.fromisoformat(text)
+        return _ceil_ms(moment)
+    except FilterError:
+        raise
+    except (ValueError, OverflowError, zoneinfo.ZoneInfoNotFoundError, OSError, LookupError) as exc:
+        raise FilterError(f"{name} is not a valid date or datetime: {describe_value(value)} ({type(exc).__name__})") from None
+
+
+def epoch_millis_to_local_iso(value: int, timezone_name: str) -> str:
+    """Epoch milliseconds -> ISO-8601 in the reporting timezone, with its offset (``...+HH:MM``)."""
+    coerce_epoch_millis_to_utc_iso(value)  # validates the value (a plain int in datetime's range)
+    moment = (_EPOCH + _dt.timedelta(milliseconds=value)).astimezone(resolve_zone(timezone_name))
+    return moment.isoformat(timespec="milliseconds")
 
 
 def utc_now() -> _dt.datetime:

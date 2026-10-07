@@ -1,0 +1,72 @@
+# Synthetic example of the Bullhorn MCP admin config (Phase 5A, Amendment A3-5).
+#
+# Every value below is made up. It contains no tenant data (D-5-22). The real file
+# lives OUTSIDE the repository and is named by the BULLHORN_ADMIN_CONFIG environment
+# variable. Secrets are given only by reference (env:NAME or file:/absolute/path);
+# a literal secret value refuses startup.
+#
+# The full schema is documented in src/bullhorn_mcp/identity/deploy.py.
+#
+# Operational constraints (shared mode):
+# - Run exactly ONE worker process (refresh and link locks are in-process).
+# - DEBUG logging is unsupported: a global log-record factory redacts secrets and the
+#   HTTP/MCP library loggers (httpx, httpcore, h11, h2, hpack, uvicorn, sse_starlette, mcp)
+#   are clamped to INFO.
+
+mode: shared
+
+# Public HTTPS base URL of this deployment (no path). The Bullhorn OAuth callback is
+# <service_base_url>/oauth/bullhorn/callback and must be registered on the Bullhorn API key.
+service_base_url: https://mcp.example.com
+
+server:
+  host: 127.0.0.1            # put a TLS-terminating reverse proxy in front
+  port: 8000
+  allowed_hosts:             # Host-header allowlist (DNS-rebinding protection)
+    - mcp.example.com
+
+auth:                        # how the MCP host authenticates workspace users
+  issuer: https://idp.example.com
+  resource_server_url: https://mcp.example.com/mcp
+  allowed_issuers:
+    - https://idp.example.com
+  display_claims: [email, name]
+  tenant_claim: null         # required when more than one tenant is configured
+  verifier:
+    kind: jwks
+    jwks_url: https://idp.example.com/.well-known/jwks.json
+    algorithms: [RS256]
+
+session_store:
+  dir: /var/lib/bullhorn-mcp/sessions          # never inside a setup store
+  keys_ref: env:BULLHORN_SESSION_KEYS          # {"active": "k1", "keys": {"k1": "<base64 of 32 bytes>"}}
+  max_session_days: 30                         # absolute session lifetime from link completion (max 90)
+
+tenants:
+  # The key is sha256(corpToken) of the tenant's Bullhorn restUrl, as 64 lowercase hex characters.
+  "0000000000000000000000000000000000000000000000000000000000000000":
+    alias: example
+    setup_store: /var/lib/bullhorn-mcp/tenants/example/store
+    exchange_dir: /var/lib/bullhorn-mcp/tenants/example/exchange
+    sso: true                # SSO tenants start with SSO login unverified (Amendment A3-6)
+    bullhorn_oauth:
+      client_id: example-client-id
+      client_secret_ref: env:BULLHORN_EXAMPLE_CLIENT_SECRET
+      redirect_uri: https://mcp.example.com/oauth/bullhorn/callback
+      auth_url: https://auth.bullhornstaffing.com
+      login_url: https://rest.bullhornstaffing.com
+    service:                 # optional read-only service identity (password grant)
+      client_id: example-service-client-id
+      client_secret_ref: env:BULLHORN_EXAMPLE_SERVICE_SECRET
+      username_ref: file:/run/secrets/bullhorn_service_username
+      password_ref: file:/run/secrets/bullhorn_service_password
+    roles:                   # roles are per tenant (top-level roles only with exactly one tenant)
+      setup_admins:
+        - issuer: https://idp.example.com
+          subject: example-admin-subject
+      write_approvers:
+        - issuer: https://idp.example.com
+          subject: example-admin-subject
+    service_principals:
+      - issuer: https://idp.example.com
+        subject: example-analytics-service

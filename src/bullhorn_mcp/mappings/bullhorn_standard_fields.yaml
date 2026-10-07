@@ -149,6 +149,7 @@ entities:
       - salary
       - payRate
       - clientBillRate
+      - jobSubmission  # Phase 5C, HV-Q9 (PHASE5C_HV_VERIFICATION.md)
     default_mappings:
       id: id
       date_added: dateAdded
@@ -161,6 +162,7 @@ entities:
       salary: salary
       pay_rate: payRate
       bill_rate: clientBillRate
+      submission_id: { field: jobSubmission, key: id }  # Phase 5C, HV-Q9
 
   ClientCorporation:
     canonical_entity: client_corporation
@@ -298,4 +300,24 @@ entities:
       reference_phone: referencePhone
       reference_title: referenceTitle
       company_name: companyName
+      status: status
+
+  # Phase 5C (D-5C-16): every name below was verified on 2026-10-07 against the
+  # Entity Reference, CorporateUser table (HV-Q8 in PHASE5C_HV_VERIFICATION.md).
+  CorporateUser:
+    canonical_entity: user
+    standard_fields:
+      - id
+      - userDateAdded
+      - firstName
+      - lastName
+      - email
+      - status
+    default_mappings:
+      id: id
+      date_added: userDateAdded
+      first_name: firstName
+      last_name: lastName
+      full_name: "{firstName} {lastName}"
+      email: email
       status: status

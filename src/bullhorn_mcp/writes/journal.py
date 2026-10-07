@@ -44,6 +44,11 @@ _ALLOWED_KEYS = (
     "comments_length",
     "associations",
     "at",
+    # Phase 5A (D-5A-14, AC-14): the identity triple of a shared-mode write.
+    "initiating_principal",
+    "tenant_key",
+    "executing_bullhorn_identity",
+    "verification",
 )
 
 

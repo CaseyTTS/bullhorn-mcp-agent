@@ -18,13 +18,13 @@ validated ints.
 from __future__ import annotations
 
 import datetime as _dt
-import re
-import zoneinfo
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from ..schema.errors import describe_value
+from ..tenant.timeutil import FilterError, resolve_zone
+from ..tenant.timeutil import parse_bound as _parse_bound
 from .action_types import ActionTypeSet, Rejection, validate
 from .model import NoteRecord
 
@@ -58,56 +58,17 @@ ORDERING_WARNING = (
     "parameter of the to-many read (HV-B5)"
 )
 
-_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
-_DATETIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})?", re.ASCII)
-_EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
-_MS = _dt.timedelta(milliseconds=1)
-
-
-class FilterError(ValueError):
-    """A filter value is invalid. The message is bounded."""
+__all__ = ["FilterError", "parse_bound"]  # FilterError is re-exported from tenant/timeutil.py (D-5C-9)
 
 
 def _zone(name: str) -> _dt.tzinfo:
-    """The reporting timezone (``UTC`` needs no tz database)."""
-    if name == "UTC":
-        return _dt.timezone.utc
-    return zoneinfo.ZoneInfo(name)
-
-
-def _ceil_ms(moment: _dt.datetime) -> int:
-    delta = moment - _EPOCH
-    whole = delta // _MS
-    return whole if delta == whole * _MS else whole + 1
+    """The reporting timezone resolver (``tenant/timeutil.resolve_zone``; patched in tests)."""
+    return resolve_zone(name)
 
 
 def parse_bound(value: object, name: str, timezone_name: str) -> int:
-    """ISO-8601 date or datetime -> epoch milliseconds (D-4B-15).
-
-    - A date-only value is midnight in the tenant reporting timezone.
-    - A datetime needs an explicit offset (or ``Z``); a naive datetime is rejected.
-    - Sub-millisecond values round up, so ``[from, to)`` holds exactly for integer
-      millisecond timestamps.
-    """
-    if not isinstance(value, str) or len(value) > 40:
-        raise FilterError(f"{name} must be an ISO-8601 date or datetime string, got {describe_value(value)}")
-    try:
-        if _DATE_RE.fullmatch(value):
-            day = _dt.date.fromisoformat(value)
-            moment = _dt.datetime(day.year, day.month, day.day, tzinfo=_zone(timezone_name))
-        else:
-            m = _DATETIME_RE.fullmatch(value)
-            if m is None:
-                raise FilterError(f"{name} must be an ISO-8601 date or datetime, got {describe_value(value)}")
-            if m.group(1) is None:
-                raise FilterError(f"{name}: a datetime without a UTC offset is not accepted, got {describe_value(value)}")
-            text = value[:-1] + "+00:00" if value.endswith("Z") else value
-            moment = _dt.datetime.fromisoformat(text)
-        return _ceil_ms(moment)
-    except FilterError:
-        raise
-    except (ValueError, OverflowError, zoneinfo.ZoneInfoNotFoundError, OSError, LookupError) as exc:
-        raise FilterError(f"{name} is not a valid date or datetime: {describe_value(value)} ({type(exc).__name__})") from None
+    """``tenant/timeutil.parse_bound`` (the single parser, D-5C-9), with this module's ``_zone`` bound at call time."""
+    return _parse_bound(value, name, timezone_name, _zone)
 
 
 def _is_id(value: object) -> bool:

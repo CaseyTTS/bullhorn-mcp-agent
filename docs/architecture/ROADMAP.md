@@ -3,23 +3,29 @@
 | | |
 |---|---|
 | **Owner** | Architect |
-| **Revision** | 3 (FINAL before Phase 4), 2026-10-06. The **phase order is fixed by the user** and is binding. |
-| **Requirements reconciled** | `REQ_TENANT_SETUP_MAPPING_MANAGEMENT.md` (TS, HV-1, CT-1, SB-1..13); `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` (RA-1..13); `REQ_OPERATIONAL_ACTIVITY_SAFE_WRITE.md` (OW-0..13). |
+| **Revision** | 3 (2026-10-06), plus the **Phase 5 approval** (2026-10-07; `PHASE5_PROPOSAL.md`, binding decisions D-5-1..D-5-25). The phase order is fixed by the user. |
+| **Requirements reconciled** | `REQ_TENANT_SETUP_MAPPING_MANAGEMENT.md` (TS, HV-1, CT-1, SB-1..13); `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` (RA-1..13, and §8, the two-tier model); `REQ_OPERATIONAL_ACTIVITY_SAFE_WRITE.md` (OW-0..13); the Phase 5 user decisions (D-5-n). |
 | **Shared vocabulary** | `CANONICAL_ACTIVITY_VOCABULARY.md` is the single definition of the activity concepts and of the operation→concept mapping. |
-| **Base** | Plan `enter-planning-mode-only-binary-cherny.md` §8, amended by ROADMAP-AMENDMENT-1..4 (`DEFERRED_DEBT.md`). |
-| **Precedence** | This revision supersedes the phase numbering of plan §8 and of roadmap revisions 1 and 2. All plan §8 scope commitments are preserved (§2). Completed Phases 0–3 are not deconstructed. |
+| **Base** | Plan `enter-planning-mode-only-binary-cherny.md` §8, amended by ROADMAP-AMENDMENT-1..4 (`DEFERRED_DEBT.md`) and the approved Phase 5 amendments PA-1..PA-6. |
+| **Precedence** | This file supersedes the phase numbering of plan §8 and of earlier roadmap revisions. All plan §8 scope commitments are preserved. Completed phases are not deconstructed. |
+| **Current state** | **Phase 5 (5B, 5A, 5C) is COMPLETE and READY FOR COMMIT/PUSH** (2026-10-07). Phase 6 is **NOT** started. There are **22** public tools. |
 
 ## Standing rules
 
-These rules come from plan §8 and are unchanged:
+- **Gates.** Every phase ends fully green: `pytest`, `ruff` and `mypy` all pass.
+- **The 10 original tools stay schema-identical, and their inputs and outputs are backward compatible.** Under D-5-2 they run under the calling user's Bullhorn session when used interactively.
+- **Review harness (from Phase 5, D-5-23):**
 
-- Every phase ends fully green (`pytest`, `ruff` and `mypy` all pass).
-- The 10 original tools stay behaviorally and schema-identical.
-- Every phase runs Architect work package → Builder → independent Reviewer.
-- Every phase is independently shippable.
-- **Sub-phases.** The Architect may split a phase into lettered sub-phases at work-package time (as 4A/4B already are). Ownership stays with the parent phase number.
+  ```
+  Architect → Builder → Independent Reviewer → Security & Identity Reviewer → final gates
+  ```
 
-## Binding constraints (recorded in the plan's revision sections)
+  Any phase touching auth, authorization, sessions, identity, tenant isolation, service accounts, secrets or redirects, or consequential writes needs **both** reviewers to PASS (`docs/process/SECURITY_REVIEWER.md`).
+- **Shippable phases.** Every phase is independently shippable.
+- **Sub-phases.** The Architect may split a phase into lettered sub-phases. Ownership stays with the parent number.
+- **Scope freeze (D-5-25).** Within a phase, only findings that make approved behaviour correct, safe, consistent or regression-protected are fixed. Everything else is deferred.
+
+## Binding constraints
 
 1. **Layering (RA-12):**
 
@@ -27,15 +33,15 @@ These rules come from plan §8 and are unchanged:
    Bullhorn raw data → canonical recruiting model → normalized activity definitions → analytics/read tools → dashboard/agent
    ```
 
-2. **Safe-write pipeline (OW-6, final order):**
+2. **Safe-write pipeline (OW-6):**
 
    ```
    intent → canonical operation → target resolution → validation → permission → idempotency/duplicate check → dry-run/preview → approval policy → Bullhorn write → audit → normalized result
    ```
 
-   - No new write exists outside this pipeline, and no arbitrary raw Bullhorn write is ever accepted.
-   - Phase 4B owns the **minimal** pipeline that `create_note` needs. Phase 7 generalizes it.
-   - The legacy `upload_candidate_resume` is the single documented exception until it is migrated in Phase 7, with its default behavior preserved.
+   - Phase 4B owns the minimal pipeline and Phase 7 generalizes it.
+   - The legacy `upload_candidate_resume` is the single exception until Phase 7.
+   - Preview ownership follows D-5-10: no cross-user confirm by default, and execution identity always stays with the requester.
 
 3. **Controlled configuration change (TS-4):**
 
@@ -43,305 +49,237 @@ These rules come from plan §8 and are unchanged:
    propose → validate → diff → admin approval → new version → activate → audit
    ```
 
-   Phase 4A owns this workflow. It shares its approval and audit primitives with the write pipeline.
+4. **One vocabulary (RA-9, OW-11).**
 
-4. **One vocabulary (RA-9, OW-11).** No consumer defines activity concepts locally.
+5. **HV-1, hard Bullhorn verification.** Never assume Bullhorn behaviour. Verify it against the official reference or the connected tenant; anything unresolved fails closed.
 
-5. **HV-1, hard Bullhorn verification.** No Bullhorn entity, field, association, status, action type or write behavior is modelled from assumption. Each is verified against authoritative reference material or against the connected tenant's metadata. Anything unverified is marked unresolved, surfaced in setup, and never guessed.
+6. **CT-1 / D-5-21, compact tool surface.** Internally rich and externally compact. Never consolidate where that would weaken a security, permission, approval, audit or tool-selection boundary.
 
-6. **CT-1, compact tool surface.** Public tools are few and parameterized. Capability lists such as RA-11 map onto them; they are not one tool per permutation.
+7. **TS-7 capability gating.**
 
-7. **TS-7 capability gating.** A capability whose required mappings are invalid refuses to run and returns its missing setup requirements.
+8. **Identity (D-5-3, D-5-7, D-5-17).**
+   - A **shared remote HTTP server** is the production model, and there is no process-global auth state for interactive users.
+   - The identity chain is: workspace caller → authenticated MCP principal → per-user Bullhorn session → Bullhorn user.
+   - `initiating_principal`, `executing_bullhorn_identity`, `approver` and `service_identity` stay distinct.
+   - No tool takes an identity parameter.
+   - The service identity is limited to unattended reads; unattended writes are default-denied (D-5-11).
+
+9. **Privacy (D-5-22).** No tenant-specific data (credentials, profiles, mappings, workflow values, SSO configuration, Note actions or business rules) is ever committed to the repo.
+
+10. **Two-tier data access (D-5-24; binding for 5C and Phase 6; single source `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8).**
+    - **Tier 1** (`bullhorn_user`, meaning the caller has a valid linked Bullhorn session) gets record-level and aggregate data.
+    - **Tier 2** (`workspace_only`) gets only approved, de-identified aggregates computed through the read-only service identity, with:
+      - cohort thresholds and complementary suppression;
+      - differencing defences;
+      - approved geography levels;
+      - anonymous client segments;
+      - a Tier 2 output allowlist.
+    - Every record-level tool is denied to Tier 2. `get_recruiting_metrics` enforces the tier automatically.
+    - Authorization and de-identification happen in the server before anything is returned to the model, never through prompting.
 
 ---
 
 ## 1. Ownership
 
-### 1.1 Recruiting analytics (RA-13) and operational (OW-12) items, de-duplicated
+### 1.1 Recruiting analytics (RA-13) and operational (OW-12) items
 
-| # | Responsibility | Requested by | Owning phase | Contributing phases |
-|---|---|---|---|---|
-| 1 | Tenant setup / field mapping, including business-value mappings | OW-12.1, RA-13.1, TS-1..7 | **4A** | 5 (adds value mappings for the concepts it introduces, through the 4A mechanism) |
-| 2 | Note action-type discovery, mapping and validation | OW-12.2 | **4B** | 4A (provides the value-mapping mechanism) |
-| 3 | Expanded entity reads | RA-13.2, OW-12.3 | **5** | 4B (Note reads) |
-| 4 | Normalized activity / event definitions | RA-13.3 | **5** | 4B (event model and `note_created`) |
-| 5 | Activity-timeline normalization | OW-12.4 | **6** | |
-| 6 | Note creation | OW-12.5 | **4B** | |
-| 7 | Generalized safe-write infrastructure | OW-12.6 | **7** | 4B (minimal pipeline) |
-| 8 | Write-specific (per-operation) permissions | OW-12.7 | **4B** for `note.create` | 7 (all other operations, plus the `raw_query` scope) |
-| 9 | Duplicate / idempotency safeguards | OW-12.8 | **4B** for notes | 7 (generalized), 8 (resume batch) |
-| 10 | Aggregation / metrics tools | RA-13.4, OW-12.9 | **6** | |
-| 11 | Downstream dashboard-agent consumption | RA-13.5, OW-12.10 | **6** (final deliverable of Phase 6) | |
+| # | Responsibility | Owning phase | Contributing |
+|---|---|---|---|
+| 1 | Tenant setup / field mapping, including business-value mappings | **4A** | 5B (Note actions), 5C (new value mappings) |
+| 2 | Note action-type discovery, mapping and validation | **4B** | 4A (mechanism); **5B** (completion; done) |
+| 3 | Expanded entity reads | **5C** (done) | 4B (Note reads) |
+| 4 | Normalized activity / event definitions | **5C** (done) | 4B (event model and `note_created`) |
+| 5 | Activity-timeline normalization | **6** (as a `get_activity` scope, D-5-5) | |
+| 6 | Note creation | **4B**. Production enablement is via the 5A procedure (EXT-1). | |
+| 7 | Generalized safe-write infrastructure | **7** | 4B |
+| 8 | Write-specific permissions | **4B** (`note.create`) | 7 |
+| 9 | Duplicate / idempotency safeguards | **4B** | 7, 8 |
+| 10 | Aggregation / metrics, including the **Tier 2** de-identified interface | **6** (single `get_recruiting_metrics`, D-5-5, D-5-24) | |
+| 11 | Dashboard-agent consumption | **6** | |
+| 12 | **Per-user Bullhorn auth / sessions / identity**, including the `access_tier` hook | **5A** (done) | 9 (re-running the security matrices) |
+| 13 | **Two-tier gating of record-level tools** (D-5-24) | **5C** (done) | 5A (hook), 6 (Tier 2 metrics) |
 
 ### 1.2 Placement of other committed capabilities
 
 | Capability | Phase |
 |---|---|
-| `find_*` structured query tools and `schema/query_builder.py` (ROADMAP-AMENDMENT-1) | **5** |
-| Composites (`candidate_360`, `job_360`) | **6**. They consume the Phase 5 reads and the Phase 6 timeline. |
-| The OW-13 end-to-end acceptance scenario | **6**. The timeline is required for "recent activity"; the note-write half is already provable at the end of 4B. |
+| `find_records` (replacing the roadmap's `find_*` family) and `schema/query_builder.py` | **5C** (done) |
+| Composites (`candidate_360`, `job_360`) | **6** |
+| OW-13 end-to-end acceptance test | **6**. Its note-write half depends on EXT-1 (§5). |
 
 ### 1.3 Required supporting behaviors (SB-1..13)
 
-| ID | Behavior | Owning phase | Notes |
-|---|---|---|---|
-| SB-1 | Pagination / complete-result retrieval | **5** | 4B applies an interim rule: explicit `truncated` / `next` markers on `get_notes`. |
-| SB-2 | Bullhorn result limits | **5** | Owned with SB-1. The limits themselves are verified (HV-1). |
-| SB-3 | Retries / rate limiting | **5** | Client-level, additive, ahead of the heavy reads. Today's single 401 retry is unchanged. |
-| SB-4 | Timezone normalization | **4A** | The tenant `reporting_timezone` setting plus an opt-in datetime coercion primitive (RAG-8). |
-| SB-5 | Date-range semantics | **4B** | Defined once, at the first date-filtered read (`get_notes`), and reused by Phases 5 and 6. |
-| SB-6 | Inactive / soft-deleted records | **5** | 4B handles it for notes. |
-| SB-7 | Recruiter identity resolution | **4B** | Author filters and identity cards. It builds on the 4A canonical `user` entity, and Phase 5 extends it. |
-| SB-8 | Client / contact identity resolution | **4B** | Note targets and identity cards. Phase 5 extends it. |
-| SB-9 | Picklist / status / action discovery | **4A** | DEBT-3. 4B uses it for Note action types. |
-| SB-10 | Duplicate prevention / idempotency | **4B** for notes | 7 (generalized), 8 (resume). |
-| SB-11 | Partial failures in bulk operations | **8** | 4B covers multi-association partial failure. |
-| SB-12 | Source-record provenance | **4B** | The activity event's `source`, `links` and `origin`, plus write-result provenance. Mapping provenance is 4A. Metric drill-back is 6. |
-| SB-13 | Tenant-specific rules kept separate from generic code | **4A** | Every tenant rule lives in the versioned profile; code stays generic. Binding on all later phases. |
-
-## 2. Phase sequence and renumbering
-
-### 2.1 Final sequence
-
-| Phase | Name | State |
+| ID | Behavior | Owner |
 |---|---|---|
-| 0 | Role scaffolding & foundation | COMPLETE (`9262810`) |
-| 1 | Cross-cutting scaffolding | COMPLETE (`0930bf0`) |
-| 2 | Module reorganization | COMPLETE (`4d7da27`); DEBT-1 and DEBT-2 carried |
-| 3 | Canonical schema & mapping layer | COMPLETE (passed review, round 5) |
-| **4A** | Tenant Setup & Mapping Management | COMPLETE (review PASS, 2026-10-06) |
-| **4B** | Notes / Activity Core | COMPLETE (re-review PASS, 2026-10-07). `create_note` is disabled in production pending external dependency **EXT-1** (§5). |
-| **5** | Expanded Recruiting Reads | |
-| **6** | Analytics / Activity Timeline | |
-| **7** | Broader Writes | |
-| **8** | Bulk Resume | |
-| **9** | Auth / Security Closeout | |
+| SB-1 | Pagination / complete-result retrieval | **5C** (done; offset only while HV-Q4 is unresolved) |
+| SB-2 | Bullhorn result limits | **5C** (done) |
+| SB-3 | Retries / rate limiting | **5C** (done for new reads; legacy path P5A-2 → 9) |
+| SB-4 | Timezone normalization | **4A** |
+| SB-5 | Date-range semantics | **4B** |
+| SB-6 | Inactive / soft-deleted records | **5C** (done; 4B for notes) |
+| SB-7 | Recruiter identity resolution | **4B** (partial) → **5A** (canonical `user`) / **5C** (CorporateUser binding; done) |
+| SB-8 | Client / contact identity resolution | **4B** → **5C** (done) |
+| SB-9 | Picklist / status / action discovery | **4A** → **5B** (Note actions) |
+| SB-10 | Duplicate prevention / idempotency | **4B** → 7, 8 |
+| SB-11 | Partial failures in bulk operations | **8** |
+| SB-12 | Source-record provenance | **4B** → 5C (done), 6 (Tier 1 only; Tier 2 never receives provenance) |
+| SB-13 | Tenant rules kept separate from generic code | **4A** |
 
-### 2.2 Original plan §8 → final
+## 2. Phase sequence
 
-| Plan §8 phase | Final phase(s) |
-|---|---|
-| 0–3 | 0–3 (unchanged) |
-| 4 First-run setup flow | **4A** (expanded by TS-1..7) |
-| 5 Entity coverage expansion | **4B** (Note reads; `add_note` is now `create_note`; the first `create()` primitive). **5** (reads of submissions, appointments, tearsheets, clients and references; `find_*`; `query_builder`). **7** (`create_submission`, `create_appointment`, `add_to_tearsheet`, generic `create()` / `update()`). |
-| 6 Composite tools | **6** |
-| 7 Write-path hardening | **4B** (minimal enforcement for notes). **7** (generalized per-operation permissions, the `raw_query` scope, migration of the legacy upload). **9** (re-running the security matrices and the approval-bypass tests). |
-| 8 Batch resume import | **8** |
-| 9 Auth hardening & retrospective | **9** |
-| (new) Analytics | **5** (definitions and reads) and **6** (timeline, metrics, dashboard) |
+### 2.1 Sequence
 
-### 2.3 Interim roadmap revision 2 (Architect proposal, superseded) → final
+| Phase | Name | State | Tools |
+|---|---|---|---|
+| 0–3 | Foundation, cross-cutting, reorganization, schema | COMPLETE | 10 |
+| 4A | Tenant Setup & Mapping Management | COMPLETE (2026-10-06) | 16 |
+| 4B | Notes / Activity Core | COMPLETE (2026-10-07) | 19 |
+| **5B** | Note-Action Setup Completion | **COMPLETE** (both reviews PASS, 2026-10-07) | 19 |
+| **5A** | Identity & Sessions | **COMPLETE** (both re-reviews PASS, 2026-10-07) | 20 (+`bullhorn_session`) |
+| **5C** | Expanded Recruiting Reads + Streamlining + two-tier gating | **COMPLETE** (Round 2 re-reviews PASS, 2026-10-07) | **22** (+`find_records`, `get_activity`) |
+| **Phase 5 overall** | 5B + 5A + 5C | **COMPLETE — READY FOR COMMIT/PUSH.** There are no commits yet; per D-5-22, nothing is committed until all of Phase 5 passes. | **22** |
+| 6 | Analytics / Activity Timeline, including the **Tier 2** interface | **NOT started** | 23 (+`get_recruiting_metrics`) |
+| 7 | Broader Writes | | |
+| 8 | Bulk Resume | | |
+| 9 | Auth / Security Closeout | | |
 
-| Rev-2 phase | Final phase(s) |
-|---|---|
-| 4 Setup | **4A** |
-| 5 Reads + find | **5** (Note reads move to **4B**) |
-| 6 Activity model (library) | **4B** (event model and `note_created`); **5** (all other concept derivers) |
-| 7 Business-definition setup | **4A** (mechanism and business values); **4B** (Note action types) |
-| 8 Safe-write + `create_note` | **4B** (minimal); **7** (generalized) |
-| 9 Activity read tools | **5** (entity-level activity reads); **6** (timeline) |
-| 10 Metrics | **6** |
-| 11 Dashboard contract | **6** |
-| 12 Submission/interview writes | **7** |
-| 13 Record/status/placement writes | **7** |
-| 14 Composites | **6** |
-| 15 Write hardening | **7** and **9** |
-| 16 Batch resume | **8** |
-| 17 Auth hardening | **9** |
-
-Roadmap revision 1 (analytics only) is fully superseded by revision 2 and therefore by this table.
-
-### 2.4 Older references
-
-The Phase 3 documents use the original plan numbering. Map those references as follows:
-
-| Reference in older documents | Means in the final roadmap |
-|---|---|
-| "Phase 4" (setup) | Phase 4A |
-| "Phase 5" (`find_*` / `query_builder`) | Phase 5 |
-| "Phase 5" (create/update payloads) | Phase 4B (notes) or Phase 7 |
-| "Phase 6" (composites / to-many associations) | Phase 6 |
-
-Every Phase 4 item in `DEFERRED_DEBT.md` is re-targeted to 4A (§4).
+**Earlier mappings.** The mappings from plan §8 and from roadmap revision 2 are unchanged (see `DEFERRED_DEBT.md`, ROADMAP-AMENDMENT-2..4). The approved PA-6 splits Phase 5 into 5B → 5A → 5C.
 
 ## 3. Phases
 
-### Phase 4A: Tenant Setup & Mapping Management (owns rows 1, SB-4, SB-9 and SB-13)
+### Phases 4A and 4B (COMPLETE)
 
-**Scope**, fixed by the user: TS-1 to TS-7 in full.
+See `PHASE4A_WORK_PACKAGE.md` and `PHASE4B_WORK_PACKAGE.md`.
 
-- first-run setup state;
-- metadata discovery;
-- verified standard mappings;
-- review of unmapped and custom fields;
-- field-mapping edits;
-- value and business-rule mappings;
-- profile import and export;
-- validate and finalize;
-- versioning;
-- a rollback-ready versioned design;
-- rediscovery and revalidation;
-- the setup-required and status states;
-- capability gating.
+### Phase 5B: Note-Action Setup Completion (COMPLETE)
 
-**Design inputs:** `REQ_TENANT_SETUP_MAPPING_MANAGEMENT.md` §2.
+See `PHASE5B_WORK_PACKAGE.md`.
 
-- Profile format v2 (mapping records with provenance), additive over Phase 3 v1.
-- Canonical catalog v2 subset: product-defined canonical fields that setup must expose, for example `job.priority`, `job.primary_recruiter_id` and a canonical `user` entity (RAG-1 to RAG-3). Their Bullhorn standard mappings are included only if verified (HV-1).
-- The controlled-change workflow, with approval tokens bound to the diff, the actor and an expiry.
-- Actor identity (OWG-10).
-- Audit with correlation IDs for configuration changes.
-- Picklist/value enrichment (DEBT-3).
-- The tenant timezone setting and the datetime coercion primitive (RAG-8).
-- A compact setup tool family (CT-1).
-- An additive setup state on `connection_status`.
+### Phase 5A: Identity & Sessions (COMPLETE)
 
-**Debt targeted** (§4): DEBT-3, NB-3, NB-4, NB-5, NB-6, NB-7, NB-9, NB-11, NB-12, NB-13, NB-15, NB-17, NB-18, NB-19, RAG-1 (canonical part), RAG-2 (canonical and mapping part), RAG-3 (mapping part), RAG-8, RAG-9, OWG-1 (mechanism), OWG-3 (configuration-approval part), OWG-5 (configuration-audit part), OWG-10.
+See `PHASE5A_WORK_PACKAGE.md`: Amendments A1–A4, the triage, and the close-out.
 
-**Out of scope:** Bullhorn record writes (4B), Note action-type enforcement (4B), entity reads beyond what discovery needs (5), and DEBT-2's `config/` package (9).
+**Delivered:**
+- The shared HTTP server.
+- Per-request identity, with the tenant selected by a claim in the verified token.
+- The Bullhorn OAuth authorization-code flow through the service's HTTPS callback.
+- Two-step account linking.
+- A per-link execution identity.
+- An encrypted session store (OBS-1 closed).
+- The trusted-origin policy (DEBT-1 closed).
+- Per-tenant roles.
+- The `access_tier` hook, with deny-by-default for Tier 2.
+- The `create_note` verification procedure (EXT-1) and the SSO enablement procedure (EXT-2).
 
-### Phase 4B: Notes / Activity Core (owns rows 2, 6, the note parts of 8 and 9, SB-5, SB-7, SB-8 and SB-12)
+### Phase 5C: Expanded Recruiting Reads + Streamlining + Tier Gating (COMPLETE)
 
-**Scope**, fixed by the user:
+See `PHASE5C_WORK_PACKAGE.md`: Amendments C1–C5, the triage, and Round 2.
 
-- Note reads;
-- the canonical Note representation;
-- tenant Note action-type discovery and validation;
-- safe Note creation;
-- verified associations;
-- dry-run, approval, permissions and audit.
+**Delivered:**
+- `find_records` and `get_activity` over `/query` only, with a structured query builder.
+- Concept definitions taken only from tenant configuration, failing closed.
+- Offset paging, retries, `tzdata` and soft-delete exclusion.
+- Provenance (Tier 1).
+- Tier gating.
+- Log scrubbing, and keyed, principal-bound audit digests.
 
-**Public tools (CT-1):**
+### Phase 6: Analytics / Activity Timeline (PA-5 and D-5-24 applied) — NOT started
 
-- `get_notes(filters…)`. Filters: target entity, candidate, job, client corporation, client contact, placement, submission, action type, author and date range, with an interim pagination marker.
-- `create_note(target_type, target_id, action_type, comments, associations=None, dry_run=…)`. Whether `dry_run` defaults to on is open question Q-W2.
-
-**Minimal safe-write pipeline**, owned here and generalized in Phase 7:
-
-- the canonical operation `create_note`;
-- target resolution with identity cards (read-before-write);
-- validation, including action type against the 4A value mappings, with rejection plus valid or mapped alternatives;
-- the `note.create` permission scope on a real policy check (the existing `permissions.check` signature, extended additively; default outcomes for the 10 original tools preserved);
-- an idempotency key and a note duplicate probe;
-- a dry-run preview bound to the commit;
-- approval, reusing the 4A token binding;
-- the Bullhorn create, plus the verified association mechanics (RAG-10, OWG-7), multi-association where permitted, orphan prevention and read-back;
-- audit with an actor and a correlation ID;
-- a normalized result containing the `note_created` event.
-
-**Activity core:** the vocabulary event model (`CANONICAL_ACTIVITY_VOCABULARY.md` §1) and the `note_created` deriver. This is the foundation that Phase 5 extends.
-
-**Debt targeted:** RAG-10, OWG-1 (discovery and enforcement), OWG-2 (`note.create` part), OWG-3 / OWG-4 / OWG-5 / OWG-6 / OWG-9 (minimal parts), OWG-7 (note create and associations).
-
-### Phase 5: Expanded Recruiting Reads (owns rows 3 and 4, SB-1, SB-2, SB-3 and SB-6)
-
-**Scope**, fixed by the user: JobSubmission and client submissions, interview instances, recruiter jobs by job-created date, priority, offers, placements, activity, and the structured query builder.
-
-**Catalog and setup:**
-
-- Canonical and Bullhorn catalog growth, verified under HV-1: submission/candidate/job status history, appointment interview fields, offer representation, placement links, and interview attendees where verified (RAG-4..7, OWG-8).
-- Entering the new value mappings through the 4A mechanism. Catalog growth triggers `setup_revalidation_required`.
-
-**Concept derivers:** every concept in the vocabulary except the timeline merge. That is `job_created`, `submission_created`, `client_submission`, the interview concepts, the offer concepts, `placement_created`, `candidate_status_changed` and `job_status_changed`.
-
-**Public tools (CT-1)** are parameterized `find_*` / read tools. Examples:
-- `find_records(entity, filters)`;
-- `find_submissions(filters, client_only=…)`;
-- `find_interviews(filters)`;
-- `find_jobs(filters)`, covering a recruiter and created-date range, and priority;
-- `find_offers(filters)`;
-- `find_placements(filters)`;
-- `get_activity(filters)`, the entity-level activity.
-
-These cover RA-10a–f. The final names are set in the Phase 5 work package.
-
-**Also:** `schema/query_builder.py` (ROADMAP-AMENDMENT-1), NB-2, pagination and complete-result retrieval, Bullhorn limits, retries and rate limiting, and soft-delete handling.
-
-**Out of scope:** any write, metrics and the timeline.
-
-### Phase 6: Analytics / Activity Timeline (owns rows 5, 10 and 11)
-
-**Scope**, fixed by the user: the canonical activity timeline and aggregation/metrics.
-
-**Public tools:**
-- `get_activity_timeline(scope, filters)`, the cross-entity timeline for a job, candidate, client corporation or contact (OW-5);
-- `get_recruiting_metrics(scope, filters, metrics=[…])`, covering recruiter, job, client and team metrics, the funnel and priority grouping (RA-10d/g).
-
-**Requirements:**
-- Every metric is computed only from vocabulary events.
-- Every result carries drill-back IDs or a handle, plus the definition versions.
-
-**Also:**
-- Composites (`candidate_360`, `job_360`), including multi-attendee joins with partial-failure tests.
-- The dashboard-agent consumption contract: versioned output schemas, contract tests, and a reference agent restricted server-side to Phase 5–6 tools.
+- **Timeline:** a `get_activity` scope, not a separate tool.
+- **Metrics:** a **single** `get_recruiting_metrics(scope, filters, metrics[])` (funnel, recruiter/job/client/team metrics, priority grouping).
+- **Tier enforcement:**
+  - Tier 1 gets full metrics with drill-back.
+  - Tier 2 gets de-identified aggregates only, per `REQ_RECRUITING_ANALYTICS_READ_MODEL.md` §8 (TT-3..TT-8).
+  - The Tier 2 service-identity computation calls the 5C internal services directly (P5C-1).
+- Composites.
+- The dashboard-agent contract.
 - The OW-13 end-to-end acceptance test.
 
-**Possible sub-split:** 6a (timeline and composites) and 6b (metrics and the dashboard contract).
+The Security & Identity Reviewer's two-tier attack list (§8.6) is blocking.
 
-### Phase 7: Broader Writes (owns row 7, plus the generalized parts of rows 8 and 9)
-
-**Scope**, fixed by the user: additional controlled recruiting writes. All of them run on the generalized pipeline, each with its own scope, idempotency rule and dry-run/live tests:
-
-- `create_candidate` / `update_candidate`;
-- `create_submission` / `update_submission`;
-- `update_submission_status`;
-- `create_interview` / `update_interview`;
-- `update_candidate_status`;
-- `update_job_status`;
-- `update_job_priority`;
-- `create_placement` / `update_placement`;
-- `associate_candidate_with_job`;
-- `add_to_tearsheet`;
-- `update_note`, only if Bullhorn permits it (to be verified).
-
-**Also:**
-- The generalized `SafeWritePipeline` (extracted from 4B), a generic `create()` / `update()`, and the full per-operation policy, including the `raw_query` scope for `search_entities` / `query_entities`.
-- Migrating `upload_candidate_resume` onto the pipeline with byte-identical default behavior and resume-upload idempotency (OWG-11).
-
-**Public surface (CT-1):** writes may be grouped into a few parameterized tools, for example `update_record_status(entity, id, status)`, rather than one tool per field. This is decided in the work package.
-
-### Phase 8: Bulk Resume (owns SB-11)
-
-**Scope:** the existing commitment, preserved. `import_resume_batch` (up to 10 resumes: parse → resolve/dedupe → field mapping → preview), then `commit_resume_batch` (the approved subset only, with a per-record result).
-
-**Built on:** the Phase 7 candidate writes and pipeline, Phase 5 find, the batch approval tokens extending the 4A/4B gate, and resume-upload idempotency.
-
-### Phase 9: Auth / Security Closeout
+### Phase 7: Broader Writes
 
 **Scope:**
-- DEBT-1 (`auth/trusted_origins.py`, including the substring-vs-host-suffix decision);
+- the remaining writes, all on the generalized pipeline, each with its own scope, idempotency rule and dry-run/live tests;
+- the `raw_query` scope;
+- migrating `upload_candidate_resume` with byte-identical defaults (OWG-11).
+
+The scope is otherwise unchanged.
+
+### Phase 8: Bulk Resume
+
+Unchanged.
+
+### Phase 9: Auth / Security Closeout (reduced by PA-1)
+
 - DEBT-2 (the `config/` package);
-- OBS-1 (`auth/secrets.py`);
-- re-running the full auth-failure, injection and approval-bypass matrices against every tool;
+- re-running the full auth-failure, injection, approval-bypass and **multi-user isolation** matrices;
+- logging, redaction and error-body hardening (see `DEFERRED_DEBT.md`, "Phase 5 close-out", for the 35 Phase 9 items);
 - the process retrospective;
-- the mypy ratchet.
+- the mypy ratchet and `ruff format` (P5C-14).
 
-NB-16 is considered here if the `config/` refactor touches package initialization.
+## 4. Deferred-debt targets
 
-## 4. Deferred-debt targets (final; see `DEFERRED_DEBT.md`)
+`DEFERRED_DEBT.md`, section "Phase 5 close-out: open debt by target", is authoritative.
 
-| Phase | Items |
+| Target | Open items |
 |---|---|
-| 4A | DEBT-3, NB-3, NB-4, NB-5, NB-6, NB-7, NB-9, NB-11, NB-12, NB-13, NB-15, NB-17, NB-18, NB-19, RAG-1 (canonical `user`), RAG-2 (canonical field and mapping), RAG-3 (mapping), RAG-8, RAG-9, OWG-1 (mechanism), OWG-3 (configuration approvals), OWG-5 (configuration audit), OWG-10 |
-| 4B | RAG-10, OWG-1 (Note actions), OWG-2 (`note.create`), OWG-3 / OWG-4 / OWG-5 / OWG-6 / OWG-9 (minimal), OWG-7 (note create and associations) |
-| 5 | NB-2, RAG-1 (resolution extension), RAG-2 (reads), RAG-3 (reads), RAG-4, RAG-5, RAG-6, RAG-7, OWG-8 |
-| 6 | RAG-4 (multi-attendee composites) |
-| 7 | RAG-2 (`update_job_priority`), OWG-2 (generalized, plus `raw_query`), OWG-3 / OWG-4 / OWG-5 / OWG-6 / OWG-7 / OWG-9 (generalized), OWG-11 |
-| 8 | OWG-9 (resume batch) |
-| 9 | DEBT-1, DEBT-2, OBS-1; NB-16 (conditional) |
-| Closed | NB-10, NB-14 |
+| Phase 6 | 7 |
+| Phase 7 | 19 |
+| Phase 8 | 0 separate (only OWG-9's batch part, counted under Phase 7) |
+| Phase 9 | 35 |
+| Pre-production / external gates | 2 (P5A-7, P5A-16) |
+| Waiting on an HV item (fails closed meanwhile) | 4 (NB-15, RAG-5, OWG-8, P4B-5) |
+| **Total** | **67** |
 
-The 4A and 4B close-outs re-target several of these items. `DEFERRED_DEBT.md` is authoritative for current targets.
+## 5. External dependencies and the pre-production gate
 
-## 5. External dependencies
-
-### EXT-1: HV-B11, the logged-in user's id, blocks `create_note` in production
+### EXT-1: `create_note` production enablement
 
 | | |
 |---|---|
-| **What is blocked** | `create_note` is **code-complete (4B) but disabled in production**. `HV_B11_VERIFIED = False` in `writes/pipeline.py`. |
-| **Why** | Bullhorn documents NoteEntity auto-creation only when both `commentingPerson` and `personReference` are sent. 4B has no **documented** mechanism to obtain the authenticated user's CorporateUser id for `commentingPerson` (`PHASE4B_HV_VERIFICATION.md` HV-B4, HV-B11). |
-| **What unblocks it** | The mechanism must be verified against the Bullhorn reference or against a connected tenant, and the verification recorded in `PHASE4B_HV_VERIFICATION.md`. |
-| **Preconditions before setting `HV_B11_VERIFIED=True`** | (1) That verification is recorded. (2) `DEFERRED_DEBT.md` **P4B-8** is closed: comments are scrubbed from the raw error body before redaction. |
-| **Owner** | The user or tenant administrator supplies the evidence. Any phase may then flip the flag through a short Architect-approved change with tests. |
-| **Impact on later phases** | The OW-13 acceptance test's note-write half (Phase 6) depends on EXT-1. If EXT-1 is still open, it runs with the flag mocked on and is reported as "blocked externally". |
+| **Blocking HV** | HV-B11 / HV-C5 is **unresolved**: no documented way to obtain the current user's CorporateUser ID. |
+| **State** | `create_note` is code-complete. It is disabled in every tenant until that tenant has a positive verification verdict. P4B-8 is closed (5B). |
+| **Resolution path (implemented in 5A, D-5A-15 / A3-4)** | A setup admin of the tenant, with a linked Bullhorn session, runs the **admin-controlled one-note verification procedure**: authorize, preview and confirm exactly one Note on a designated test record. The read-back verdict is recorded. A positive verdict enables person targets, as long as the `rest_url` fingerprint is unchanged. |
+| **Before enablement** | Re-assess P5B-1 / P5B-14 (residual scrub encodings). On an SSO tenant, EXT-2 comes first. |
+
+### EXT-2: SSO / Duo tenant login enablement
+
+| | |
+|---|---|
+| **Blocking HV** | HV-C2 is **unresolved**: Bullhorn's SSO/Duo behaviour in the OAuth code flow is undocumented. **The user's own tenant uses SSO with Duo.** |
+| **State** | On an SSO tenant, ordinary users' logins are refused (`unsupported_sso`) until the tenant is enabled. |
+| **Resolution path (implemented in 5A, A3-6)** | A setup admin performs one real **verification login** through the deployment's HTTPS callback. Only server-observable results are recorded, with no secrets. The admin then explicitly commits `enable_sso_login`. Re-verification is required if the auth host or the OAuth client configuration changes. |
+| **Prerequisites** | **Fix P5A-7 first:** a failed ping must record a negative observation. A deployed shared server with a public HTTPS base URL (Q-A2). The callback URI must be registered on the tenant's Bullhorn API key (HV-C1). |
+
+### Pre-production gate (P5A-16)
+
+Before the first production shared deployment, re-assess:
+- the redaction and DoS items P5A-10..P5A-14;
+- P5C-2 (logger children created later);
+- P5C-3 (the legacy audit records raw query text and path IDs);
+- P5C-16 (the cursor / audit key silently falling back to a per-process secret).
+
+Single-worker operation is enforced (5A L-5), and DEBUG logging is unsupported in shared mode.
+
+### 5.1 Unresolved HV items across Phase 5, and their fail-closed effect
+
+| HV item | Sub-phase | Unresolved aspect | Fail-closed effect |
+|---|---|---|---|
+| HV-D1..D3 | 5B | `/settings/commentActionList` behaviour | `SETTINGS_ACTION_SOURCE_VERIFIED=False`. The settings source is unreachable. Note actions come only from meta options plus admin-adopted mappings. |
+| HV-C2 | 5A | SSO / Duo in the code flow | `unsupported_sso` for ordinary users on an SSO tenant, until EXT-2. |
+| HV-C3 (partial) | 5A | Token-response field names | Strict RFC 6749 parsing. Any deviation means login fails. |
+| HV-C5 = HV-B11 | 5A / 4B | Current-user CorporateUser ID | `create_note` is disabled until there is a positive verification verdict (EXT-1). `commentingPerson` is omitted (the default is the creator). |
+| HV-C6 | 5A | Token revocation | Logout is local-only: the session is deleted on the server, and Bullhorn tokens expire naturally. |
+| HV-C7 | 5A | PKCE | No PKCE: a confidential client plus `state`. |
+| HV-C9 | 5A | Concurrent-session limits | Logins and refreshes are serialized per principal. |
+| HV-B5 | 4B (inherited) | Note query / filter / ordering mechanics | `get_notes` works only on the job and placement scopes. Other scopes and the action / author / date filters return `unsupported_filter`. Results are in server order. |
+| HV-B9 | 4B (inherited) | CorporateUser lookup by name for the `author` filter | `author` returns `unsupported_filter`. |
+| HV-Q2 (partial) | 5C | `LIKE` and string escaping | No `starts_with`. String values are limited to `[A-Za-z0-9 ._@-]`; anything else, including apostrophes, returns `unsupported_value`. |
+| HV-Q3 | 5C | `/search` Lucene index names | `/search` is not used; there is no effect, because `/query` covers all 8 entities. |
+| HV-Q4 | 5C | `/query` `orderBy` direction | Offset paging only, with a consistency warning. Any `sort` returns `unsupported_sort`. P4B-5 stays open. |
+| HV-Q6 (partial) | 5C | Whether `/query` returns soft-deleted rows | `include_deleted=true` returns `unsupported_filter`. The exclusion is query plus post-filter. A NULL `isDeleted` means "not deleted" (interpretation HV-Q6-I). |
+| HV-Q7 (partial) | 5C | `Retry-After` | Not parsed. Fixed backoff: base 1 s, cap 8 s, at most 2 retries, a 30 s budget. |
+| HV-Q9 (partial) | 5C | Appointment status, cancellation and reschedule fields; placement client and recruiter fields | `interview_rescheduled` returns `unsupported_concept`. `appointment.status`, `placement.client_corporation_id` and `placement.recruiter_id` are tenant-mapped only; when unmapped, the links are null and listed in `unresolved_links`. A recurring series is not expanded. |
+| HV-Q9b | 5C | Parent-appointment link for invitee copies | See `PHASE5C_HV_VERIFICATION.md`. If unresolved, every `interview_*` concept returns `unsupported_concept` (`invitee_copies_unresolved`). |
+| HV-Q10 | 5C | Status-history sources | `client_submission` is dated only by `submission_date_added`. `job_status_changed` / `candidate_status_changed` return `unsupported_concept`. RAG-5 / OWG-8 stay open. |

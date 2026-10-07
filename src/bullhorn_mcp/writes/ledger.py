@@ -211,10 +211,19 @@ class Ledger:
             return Verdict("new")
         return self._verdict(key, state)
 
-    def begin(self, key: IdempotencyKey, now: _dt.datetime, *, operation_id: str, correlation_id: str) -> Verdict:
+    def begin(
+        self,
+        key: IdempotencyKey,
+        now: _dt.datetime,
+        *,
+        operation_id: str,
+        correlation_id: str,
+        identity: dict[str, Any] | None = None,
+    ) -> Verdict:
         """Claim the key by exclusively creating the next generation (``pending``).
 
         Returns ``Verdict("new", generation=N)`` only for the single winner of generation N.
+        Phase 5A (AC-14): a shared-mode write records its identity triple in the entry.
         """
         self._dir(create=True)
         for _ in range(3):
@@ -235,6 +244,8 @@ class Ledger:
                 "correlation_id": correlation_id,
                 "created_at": format_utc(now),
             }
+            if identity is not None:
+                entry["identity"] = dict(identity)
             if exclusive_create(self._generation_path(key, nxt), entry):
                 return Verdict("new", generation=nxt)
             # Lost the race for generation `nxt`: re-read; the winner's pending entry is now current.
