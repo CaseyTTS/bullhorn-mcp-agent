@@ -1,80 +1,77 @@
 # Bullhorn MCP Agent
 
-A Python Model Context Protocol (MCP) server for Bullhorn CRM, extended for agent-oriented recruiting workflows.
+A Python Model Context Protocol (MCP) server for Bullhorn, extended into a recruiting-domain operating layer for AI agents and enterprise workflows.
 
-This project is based on the open-source [`osherai/bullhorn-mcp-python`](https://github.com/osherai/bullhorn-mcp-python) project and expands it with additional tools intended for AI agents, recruiting automation, candidate document workflows, and cross-system orchestration.
+This project began from the open-source `osherai/bullhorn-mcp-python` project and has been substantially expanded with tenant-aware schema mapping, per-user Bullhorn authentication, controlled writes, recruiting activity models, audit and approval controls, and agent-oriented workflow tooling.
 
-The goal is to provide a controlled MCP layer between an AI agent and Bullhorn rather than giving the model direct access to Bullhorn credentials or unrestricted API access.
-
----
-
-## What It Does
-
-The server exposes Bullhorn functionality as MCP tools that can be called by MCP-compatible AI clients such as Codex.
-
-### Current MCP Tools
-
-#### Connection
-
-- `connection_status`
-  - Checks whether required Bullhorn environment variables are configured.
-  - Attempts to verify Bullhorn connectivity when credentials are present.
-  - Does not expose credentials to the AI client.
-
-#### Jobs
-
-- `list_jobs`
-  - List and filter Bullhorn JobOrders.
-  - Supports Lucene search, status filtering, limits, and field selection.
-
-- `get_job`
-  - Retrieve a specific JobOrder by Bullhorn ID.
-
-#### Candidates
-
-- `list_candidates`
-  - List and filter Bullhorn Candidates.
-  - Supports Lucene search, status filtering, limits, and field selection.
-
-- `get_candidate`
-  - Retrieve a specific Candidate by Bullhorn ID.
-
-- `get_candidate_files`
-  - List files attached to an existing Bullhorn Candidate.
-
-- `upload_candidate_resume`
-  - Upload a local resume or document to an existing Bullhorn Candidate.
-
-#### Placements
-
-- `get_recent_placements`
-  - Retrieve Bullhorn Placement records created within a specified number of days.
-  - Includes bounded date and result limits for safer agent use.
-
-#### Generic Bullhorn Access
-
-- `search_entities`
-  - Search Bullhorn entities using Lucene query syntax.
-
-- `query_entities`
-  - Query Bullhorn entities using Bullhorn's SQL-like/JPQL-style query syntax.
+The goal is to provide a governed layer between AI systems and Bullhorn rather than giving a model direct access to credentials, unrestricted REST endpoints, or tenant-specific business logic.
 
 ---
 
-## Example Architecture
+## Current Status
 
-The MCP server acts as a controlled adapter between an AI agent and Bullhorn.
+This project is currently in active **POC and test-stage development**.
+
+It is not yet distributed for production use.
+
+The current focus is validating:
+
+- authentication and session isolation
+- tenant configuration and mapping
+- permission boundaries
+- recruiting-domain semantics
+- safe read/write patterns
+- auditability
+- security controls
+- historical analytics architecture
+- enterprise Workspace integration
+
+Bullhorn remains the system of record.
+
+---
+
+## What This Project Is Becoming
+
+This is no longer just a thin REST wrapper around Bullhorn.
+
+The MCP is being developed as a recruiting-domain operating layer that sits between AI systems and Bullhorn.
+
+Its responsibilities include:
+
+- authenticating users
+- isolating Bullhorn sessions
+- enforcing permissions
+- translating canonical recruiting concepts into tenant-specific Bullhorn fields
+- validating workflows
+- controlling writes
+- auditing actions
+- exposing structured recruiting data
+- supporting analytics and historical intelligence
+- keeping the model away from raw credentials and unrestricted API access
+
+Conceptually:
 
 ```text
-                AI Agent / Codex
-                       |
-                       | MCP
-                       v
-              Bullhorn MCP Agent
-                       |
-                       | Bullhorn REST API
-                       v
-                    Bullhorn
+ChatGPT Workspace / AI Agent
+            |
+            | MCP
+            v
+Bullhorn Recruiting Orchestrator
+    |
+    |-- Authentication / session isolation
+    |-- Permissions
+    |-- Tenant mappings
+    |-- Canonical recruiting schema
+    |-- Safe reads
+    |-- Controlled writes
+    |-- Approval gates
+    |-- Audit
+    |-- Activity / analytics
+    |
+    | Bullhorn REST API
+    v
+Bullhorn
+```
 
 ---
 
