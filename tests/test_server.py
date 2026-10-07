@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 from bullhorn_mcp import server
 from bullhorn_mcp.auth import AuthenticationError
-from bullhorn_mcp.client import BullhornAPIError, BullhornClient
+from bullhorn_mcp.bullhorn.client import BullhornAPIError, BullhornClient
 
 
 @pytest.fixture

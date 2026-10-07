@@ -3,7 +3,7 @@
 import pytest
 from bullhorn_mcp.config import BullhornConfig
 from bullhorn_mcp.auth import BullhornAuth, BullhornSession
-from bullhorn_mcp.client import BullhornClient
+from bullhorn_mcp.bullhorn.client import BullhornClient
 
 
 @pytest.fixture

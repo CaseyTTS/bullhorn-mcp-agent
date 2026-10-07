@@ -6,7 +6,7 @@ import httpx
 import respx
 from unittest.mock import Mock, PropertyMock
 from bullhorn_mcp.auth import BullhornAuth, BullhornSession
-from bullhorn_mcp.client import BullhornClient, BullhornAPIError, DEFAULT_FIELDS
+from bullhorn_mcp.bullhorn.client import BullhornClient, BullhornAPIError, DEFAULT_FIELDS
 
 
 @pytest.fixture
