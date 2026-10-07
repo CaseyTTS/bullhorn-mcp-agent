@@ -1,21 +1,84 @@
-MIT License
+CaseyTTS Source-Available No-Resale License 1.0
 
-Copyright (c) 2025 Osher Digital (https://osher.com.au)
+Copyright (c) 2026 CaseyTTS
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is granted, free of charge, to any person or organization obtaining a
+copy of this software and associated documentation files to:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+- use the software for personal, educational, research, evaluation, or internal
+  organizational purposes;
+- copy, clone, and fork the software;
+- modify, adapt, extend, and improve the software;
+- deploy the software for internal use within an organization;
+- benefit commercially from the software as an internal operational tool;
+- redistribute source-code modifications or derivative works for non-resale,
+  collaborative, or open-development purposes, subject to the terms below.
+
+Resale and Commercialization Restriction
+
+Without prior express written permission from the copyright holder, you may not:
+
+- sell or resell this software;
+- sell or resell a substantially similar derivative of this software;
+- relicense this software for a fee;
+- white-label or rebrand this software for commercial resale;
+- package this software as a commercial product for sale to third parties;
+- offer this software, or a substantially similar derivative, as a paid hosted
+  service or SaaS product;
+- charge third parties primarily for access to, licensing of, or use of this
+  software itself.
+
+This restriction does not prohibit an organization from using the software
+internally in the ordinary course of its business, including in connection with
+revenue-generating operations.
+
+Attribution
+
+Redistributions permitted under this license must retain:
+
+- this license;
+- applicable copyright notices;
+- all required third-party and upstream license notices.
+
+Upstream Software
+
+Portions of this project originate from or are derived from software released
+under the MIT License, including osherai/bullhorn-mcp-python
+(Copyright (c) 2025 Osher Digital, https://osher.com.au). The upstream MIT
+License text is preserved in
+THIRD_PARTY_LICENSES/osherai-bullhorn-mcp-python-MIT.txt.
+
+Nothing in this license is intended to remove, revoke, or restrict rights
+granted under the applicable upstream licenses for upstream code. Those portions
+remain subject to their respective upstream licenses.
+
+This license applies to the original contributions, modifications, architecture,
+documentation, and additional code authored by CaseyTTS, to the extent legally
+permitted.
+
+Commercial Licensing
+
+Commercial resale, commercial redistribution, white-labeling, or paid hosting
+rights may be available under a separate written agreement with the copyright
+holder.
+
+Permission must be obtained in writing before engaging in any activity
+prohibited by the Resale and Commercialization Restriction above. Requests for
+written permission may be directed to the copyright holder via
+https://github.com/CaseyTTS.
+
+Governing Law
+
+This license is governed by the laws of the State of Texas, United States of
+America, and applicable United States federal law, without regard to
+conflict-of-law principles.
+
+No Warranty
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR
+A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

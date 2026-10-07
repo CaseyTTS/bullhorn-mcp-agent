@@ -75,3 +75,11 @@ The MCP server acts as a controlled adapter between an AI agent and Bullhorn.
                        | Bullhorn REST API
                        v
                     Bullhorn
+
+---
+
+## License
+
+License: Source-available for self-use, internal organizational use, modification, forking, and open development. Resale, white-labeling, commercial packaging, or offering the software itself as a paid hosted service requires prior express written permission. Portions derived from upstream MIT-licensed projects remain subject to their original licenses.
+
+See [`LICENSE`](LICENSE) (CaseyTTS Source-Available No-Resale License 1.0) and [`THIRD_PARTY_LICENSES/`](THIRD_PARTY_LICENSES/) for the preserved upstream MIT License of `osherai/bullhorn-mcp-python`. This license is not an OSI-approved open-source license.
