@@ -1,0 +1,161 @@
+# Canonical (ATS-agnostic) schema, version 1.
+#
+# This file is the shared vocabulary for every agent and front-end. It must
+# never contain ATS-specific entity or field names: the translation to a
+# particular ATS lives in that ATS's catalog (for example
+# bullhorn_standard_fields.yaml) and in tenant mapping profiles.
+#
+# Allowed field types: id, string, text, integer, number, boolean, datetime,
+# date, reference (requires ref:), list.
+#
+# Status-like fields are `string` in v1: status values are tenant-configured
+# and value normalization is out of scope.
+version: 1
+entities:
+  candidate:
+    description: "A person being recruited."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      first_name: { type: string }
+      last_name: { type: string }
+      full_name: { type: string, description: "First and last name together." }
+      email: { type: string }
+      phone: { type: string }
+      mobile: { type: string }
+      status: { type: string, description: "Tenant-configured status value." }
+      occupation: { type: string, description: "Current or most recent job title." }
+      skills: { type: text, description: "Free-text skills summary." }
+      source: { type: string, description: "Where the person came from." }
+      city: { type: string }
+      state: { type: string }
+      owner_id: { type: reference, ref: user, description: "Recruiter who owns the record." }
+      date_last_modified: { type: datetime, description: "When the record was last changed." }
+
+  job:
+    description: "An open position to be filled."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      title: { type: string }
+      status: { type: string, description: "Tenant-configured status value." }
+      employment_type: { type: string }
+      is_open: { type: boolean }
+      num_openings: { type: integer }
+      description: { type: text }
+      start_date: { type: datetime }
+      salary: { type: number }
+      pay_rate: { type: number }
+      bill_rate: { type: number }
+      city: { type: string }
+      state: { type: string }
+      client_corporation_id: { type: reference, ref: client_corporation }
+      client_contact_id: { type: reference, ref: client_contact }
+      owner_id: { type: reference, ref: user, description: "User who owns the record." }
+      priority: { type: string, description: "Tenant-mapped job priority." }
+      primary_recruiter_id: { type: reference, ref: user, description: "Tenant-mapped primary recruiter." }
+
+  submission:
+    description: "A person put forward for a position."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      candidate_id: { type: reference, ref: candidate }
+      job_id: { type: reference, ref: job }
+      status: { type: string, description: "Tenant-configured status value." }
+      source: { type: string }
+      sending_user_id: { type: reference, ref: user, description: "User credited with the submission." }
+
+  placement:
+    description: "A person hired into a position."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      candidate_id: { type: reference, ref: candidate }
+      job_id: { type: reference, ref: job }
+      status: { type: string, description: "Tenant-configured status value." }
+      start_date: { type: datetime }
+      end_date: { type: datetime }
+      employment_type: { type: string }
+      salary: { type: number }
+      pay_rate: { type: number }
+      bill_rate: { type: number }
+
+  client_corporation:
+    description: "A hiring company."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      name: { type: string }
+      status: { type: string, description: "Tenant-configured status value." }
+      phone: { type: string }
+      website: { type: string }
+      city: { type: string }
+      state: { type: string }
+
+  client_contact:
+    description: "A person who works at a hiring company."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      first_name: { type: string }
+      last_name: { type: string }
+      full_name: { type: string, description: "First and last name together." }
+      email: { type: string }
+      phone: { type: string }
+      title: { type: string, description: "The contact's job title." }
+      status: { type: string, description: "Tenant-configured status value." }
+      client_corporation_id: { type: reference, ref: client_corporation }
+      owner_id: { type: reference, ref: user, description: "User who owns the record." }
+
+  appointment:
+    description: "A scheduled meeting, call or interview."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      subject: { type: string }
+      type: { type: string }
+      description: { type: text }
+      location: { type: string }
+      start_at: { type: datetime }
+      end_at: { type: datetime }
+      candidate_id: { type: reference, ref: candidate }
+      client_contact_id: { type: reference, ref: client_contact }
+      job_id: { type: reference, ref: job }
+      owner_id: { type: reference, ref: user, description: "User who owns the record." }
+
+  note:
+    description: "A free-text comment attached to a person or record."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      action: { type: string, description: "Tenant-configured action/category." }
+      body: { type: text }
+      person_id: { type: reference, ref: person, description: "Person the comment is about." }
+      author_id: { type: reference, ref: person, description: "Person who wrote the comment." }
+      job_id: { type: reference, ref: job }
+      is_deleted: { type: boolean }
+
+  tearsheet:
+    description: "A named, saved list of records."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      name: { type: string }
+      description: { type: text }
+      is_private: { type: boolean }
+      owner_id: { type: reference, ref: user, description: "User who owns the list." }
+
+  candidate_reference:
+    description: "A professional reference given for a person being recruited."
+    fields:
+      id: { type: id, required: true, description: "Unique record identifier." }
+      date_added: { type: datetime, description: "When the record was created." }
+      candidate_id: { type: reference, ref: candidate }
+      reference_first_name: { type: string }
+      reference_last_name: { type: string }
+      reference_email: { type: string }
+      reference_phone: { type: string }
+      reference_title: { type: string }
+      company_name: { type: string }
+      status: { type: string, description: "Tenant-configured status value." }

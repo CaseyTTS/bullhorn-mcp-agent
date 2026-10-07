@@ -1,0 +1,6 @@
+version: 1
+tenant: acme
+entities:
+  job:
+    standard:
+      title: title

@@ -1,0 +1,9 @@
+format: tenant-profile/v2
+tenant: {id: acme, label: Acme Staffing}
+profile_version: 1
+catalog_fingerprint: '0e073dc78538ae31e6a72392a7fc84db70718416b2eca5347cfe92edf4ac4940'
+rest_url_fingerprint: null
+settings: {reporting_timezone: UTC}
+value_mappings:
+  - {key: done, entity: appointment, target: {kind: concept, name: interview_completed}, bullhorn_field: type, values: [X]}
+  - {key: cancelled, entity: appointment, target: {kind: concept, name: interview_cancelled}, bullhorn_field: type, values: [X]}

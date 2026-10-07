@@ -1,0 +1,5 @@
+version: 1
+entities:
+  spaceship:
+    custom:
+      warp: customText1

@@ -1,0 +1,16 @@
+format: tenant-profile/v2
+tenant: {id: acme, label: Acme Staffing}
+profile_version: 1
+catalog_fingerprint: '0e073dc78538ae31e6a72392a7fc84db70718416b2eca5347cfe92edf4ac4940'
+rest_url_fingerprint: null
+settings: {reporting_timezone: UTC}
+field_mappings:
+  - {entity: job, field: priority, kind: standard, target: customText12, source: administrator, active: true,
+     validation: {state: valid, checked_at: '2026-10-06T12:00:00Z', detail: null},
+     created_at: '2026-10-06T12:00:00Z', updated_at: '2026-10-06T12:00:00Z'}
+  - {entity: job, field: hot_flag, kind: custom, target: {field: customObject1s, key: id}, type: integer, source: administrator, active: true}
+value_mappings:
+  - {key: job.priority.order, target: {kind: ordering, entity: job, field: priority}, bullhorn_field: customText12,
+     values: [A, B, C], source: administrator, active: true}
+  - {key: interview_done, entity: appointment, target: {kind: concept, name: interview_completed}, bullhorn_field: type,
+     values: [Interview - Completed], source: administrator, active: true}

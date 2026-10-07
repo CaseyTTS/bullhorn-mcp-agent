@@ -1,0 +1,5 @@
+version: 1
+entities:
+  candidate:
+    standard:
+      favourite_colour: customText1

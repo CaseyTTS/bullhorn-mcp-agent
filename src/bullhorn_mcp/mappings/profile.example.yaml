@@ -1,0 +1,35 @@
+# Example tenant mapping profile (version 1).
+#
+# Real tenant profiles live OUTSIDE the package; point BULLHORN_MAPPING_PROFILE
+# at one. Raw targets below use only names from the verified Bullhorn catalog
+# (bullhorn_standard_fields.yaml) or the custom-field families it declares.
+#
+# Target forms:
+#   rawName                       a plain Bullhorn field
+#   "{rawA} {rawB}"               a template of plain fields only
+#   { field: f, key: k }          a nested lookup (custom entries may add `type`)
+version: 1
+tenant: example-staffing
+generated_at: "2026-10-06T00:00:00+00:00"
+entities:
+  candidate:
+    standard:
+      # This tenant keeps its skills summary in a custom text block.
+      skills: customTextBlock2
+    custom:
+      region: customText7
+      clearance_level: customText3
+      contact_line: "{firstName} {lastName} <{email}>"
+    unmapped_bullhorn_fields:
+      - field: customText12
+        label: Preferred Shift
+        data_type: String
+        field_type: SCALAR
+        options:
+          - { value: Day, label: Day }
+          - { value: Night, label: Night }
+      - customInt4
+  job:
+    custom:
+      owner_user_id: { field: owner, key: id, type: integer }
+      internal_code: customText1

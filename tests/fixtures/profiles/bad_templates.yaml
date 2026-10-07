@@ -1,0 +1,11 @@
+version: 1
+entities:
+  candidate:
+    custom:
+      t_dotted: "{a.b}"
+      t_index: "{a[0]}"
+      t_conversion: "{a!r}"
+      t_format: "{a:>5}"
+      t_empty: "{}"
+      t_positional: "{0}"
+      t_unbalanced: "{firstName"

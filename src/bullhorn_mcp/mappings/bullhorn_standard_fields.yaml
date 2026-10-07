@@ -1,0 +1,301 @@
+# Bullhorn standard-field catalog, version 1.
+#
+# Every entity name, standard field, mapping source (including nested
+# field/key parts and template placeholders), custom-field family and named
+# sensitive field below was verified on 2026-10-06 against the Bullhorn REST
+# API reference:
+#   - https://bullhorn.github.io/rest-api-docs/entityref.html (Entity Reference)
+#   - https://bullhorn.github.io/rest-api-docs/ ("Entity ids": every entity has
+#     an `id` field, which confirms the `key: id` part of every to-one lookup)
+# See docs/architecture/PHASE3_UNVERIFIED_MAPPINGS.md for the verification
+# record and for anything omitted. Do not add names without verifying them.
+#
+# default_mappings are canonical -> raw. Target forms:
+#   rawName                 a plain field
+#   "{rawA} {rawB}"         a template of plain fields only
+#   { field: f, key: k }    a nested lookup (association or composite)
+version: 1
+
+# Tenant-configurable field families (documented as ranges such as
+# "customText1 to 40" / "customBillRate1-10"); applied to every entity.
+custom_field_patterns:
+  - 'customText\d+'
+  - 'customTextBlock\d+'
+  - 'customInt\d+'
+  - 'customFloat\d+'
+  - 'customDate\d+'
+  - 'customObject\d+s'
+  - 'customEncryptedText\d+'   # sensitive: never sampled
+  - 'customBillRate\d+'
+  - 'customPayRate\d+'
+
+# Never sampled during discovery. Full-match regular expressions.
+sensitive_field_patterns:
+  - 'customEncryptedText\d+'
+  - 'ssn'
+  - 'taxID'
+  - 'dateOfBirth'
+  - 'password'
+  - 'gender'
+  - 'ethnicity'
+  - 'veteran'
+  - 'disability'
+  - 'maritalStatus'
+
+entities:
+  Candidate:
+    canonical_entity: candidate
+    standard_fields:
+      - id
+      - dateAdded
+      - firstName
+      - lastName
+      - email
+      - phone
+      - mobile
+      - status
+      - occupation
+      - skillSet
+      - source
+      - address
+      - owner
+      - dateLastModified
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      first_name: firstName
+      last_name: lastName
+      full_name: "{firstName} {lastName}"
+      email: email
+      phone: phone
+      mobile: mobile
+      status: status
+      occupation: occupation
+      skills: skillSet
+      source: source
+      city: { field: address, key: city }
+      state: { field: address, key: state }
+      owner_id: { field: owner, key: id }
+      date_last_modified: dateLastModified
+
+  JobOrder:
+    canonical_entity: job
+    standard_fields:
+      - id
+      - dateAdded
+      - title
+      - status
+      - employmentType
+      - isOpen
+      - numOpenings
+      - description
+      - startDate
+      - salary
+      - payRate
+      - clientBillRate
+      - address
+      - clientCorporation
+      - clientContact
+      - owner
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      title: title
+      status: status
+      employment_type: employmentType
+      is_open: isOpen
+      num_openings: numOpenings
+      description: description
+      start_date: startDate
+      salary: salary
+      pay_rate: payRate
+      bill_rate: clientBillRate
+      city: { field: address, key: city }
+      state: { field: address, key: state }
+      client_corporation_id: { field: clientCorporation, key: id }
+      client_contact_id: { field: clientContact, key: id }
+      owner_id: { field: owner, key: id }
+
+  JobSubmission:
+    canonical_entity: submission
+    standard_fields:
+      - id
+      - dateAdded
+      - candidate
+      - jobOrder
+      - status
+      - source
+      - sendingUser
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      candidate_id: { field: candidate, key: id }
+      job_id: { field: jobOrder, key: id }
+      status: status
+      source: source
+      sending_user_id: { field: sendingUser, key: id }
+
+  Placement:
+    canonical_entity: placement
+    standard_fields:
+      - id
+      - dateAdded
+      - candidate
+      - jobOrder
+      - status
+      - dateBegin
+      - dateEnd
+      - employmentType
+      - salary
+      - payRate
+      - clientBillRate
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      candidate_id: { field: candidate, key: id }
+      job_id: { field: jobOrder, key: id }
+      status: status
+      start_date: dateBegin
+      end_date: dateEnd
+      employment_type: employmentType
+      salary: salary
+      pay_rate: payRate
+      bill_rate: clientBillRate
+
+  ClientCorporation:
+    canonical_entity: client_corporation
+    standard_fields:
+      - id
+      - dateAdded
+      - name
+      - status
+      - phone
+      - companyURL
+      - address
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      name: name
+      status: status
+      phone: phone
+      website: companyURL
+      city: { field: address, key: city }
+      state: { field: address, key: state }
+
+  ClientContact:
+    canonical_entity: client_contact
+    standard_fields:
+      - id
+      - dateAdded
+      - firstName
+      - lastName
+      - email
+      - phone
+      - occupation
+      - status
+      - clientCorporation
+      - owner
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      first_name: firstName
+      last_name: lastName
+      full_name: "{firstName} {lastName}"
+      email: email
+      phone: phone
+      title: occupation
+      status: status
+      client_corporation_id: { field: clientCorporation, key: id }
+      owner_id: { field: owner, key: id }
+
+  Appointment:
+    canonical_entity: appointment
+    standard_fields:
+      - id
+      - dateAdded
+      - subject
+      - type
+      - description
+      - location
+      - dateBegin
+      - dateEnd
+      - candidateReference
+      - clientContactReference
+      - jobOrder
+      - owner
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      subject: subject
+      type: type
+      description: description
+      location: location
+      start_at: dateBegin
+      end_at: dateEnd
+      candidate_id: { field: candidateReference, key: id }
+      client_contact_id: { field: clientContactReference, key: id }
+      job_id: { field: jobOrder, key: id }
+      owner_id: { field: owner, key: id }
+
+  Note:
+    canonical_entity: note
+    standard_fields:
+      - id
+      - dateAdded
+      - action
+      - comments
+      - personReference
+      - commentingPerson
+      - jobOrder
+      - isDeleted
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      action: action
+      body: comments
+      person_id: { field: personReference, key: id }
+      author_id: { field: commentingPerson, key: id }
+      job_id: { field: jobOrder, key: id }
+      is_deleted: isDeleted
+
+  Tearsheet:
+    canonical_entity: tearsheet
+    standard_fields:
+      - id
+      - dateAdded
+      - name
+      - description
+      - isPrivate
+      - owner
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      name: name
+      description: description
+      is_private: isPrivate
+      owner_id: { field: owner, key: id }
+
+  CandidateReference:
+    canonical_entity: candidate_reference
+    standard_fields:
+      - id
+      - dateAdded
+      - candidate
+      - referenceFirstName
+      - referenceLastName
+      - referenceEmail
+      - referencePhone
+      - referenceTitle
+      - companyName
+      - status
+    default_mappings:
+      id: id
+      date_added: dateAdded
+      candidate_id: { field: candidate, key: id }
+      reference_first_name: referenceFirstName
+      reference_last_name: referenceLastName
+      reference_email: referenceEmail
+      reference_phone: referencePhone
+      reference_title: referenceTitle
+      company_name: companyName
+      status: status

@@ -1,0 +1,24 @@
+# Canonical activity concept IDs (Phase 4A, D-4A-15).
+#
+# Copied verbatim from docs/architecture/CANONICAL_ACTIVITY_VOCABULARY.md,
+# section 2 (Concepts v1). Value-mapping concept targets must name one of
+# these IDs. Phase 4B extends this list into full concept definitions (D4).
+# Adding a concept requires a vocabulary version bump.
+version: 1
+concepts:
+  - job_created
+  - job_status_changed
+  - candidate_status_changed
+  - submission_created
+  - client_submission
+  - interview_scheduled
+  - interview_rescheduled
+  - interview_completed
+  - interview_cancelled
+  - interview_upcoming
+  - offer_extended
+  - offer_accepted
+  - offer_declined
+  - offer_pending
+  - placement_created
+  - note_created

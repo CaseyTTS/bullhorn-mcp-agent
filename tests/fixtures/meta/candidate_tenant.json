@@ -1,0 +1,133 @@
+{
+ "entity": "Candidate",
+ "label": "Candidate",
+ "fields": [
+  {
+   "name": "id",
+   "type": "ID",
+   "label": "Id",
+   "dataType": "Integer"
+  },
+  {
+   "name": "dateAdded",
+   "type": "SCALAR",
+   "label": "DateAdded",
+   "dataType": "Timestamp"
+  },
+  {
+   "name": "firstName",
+   "type": "SCALAR",
+   "label": "FirstName",
+   "dataType": "String"
+  },
+  {
+   "name": "lastName",
+   "type": "SCALAR",
+   "label": "LastName",
+   "dataType": "String"
+  },
+  {
+   "name": "email",
+   "type": "SCALAR",
+   "label": "Email",
+   "dataType": "String"
+  },
+  {
+   "name": "phone",
+   "type": "SCALAR",
+   "label": "Phone",
+   "dataType": "String"
+  },
+  {
+   "name": "status",
+   "type": "SCALAR",
+   "label": "Status",
+   "dataType": "String"
+  },
+  {
+   "name": "occupation",
+   "type": "SCALAR",
+   "label": "Occupation",
+   "dataType": "String"
+  },
+  {
+   "name": "skillSet",
+   "type": "SCALAR",
+   "label": "SkillSet",
+   "dataType": "String"
+  },
+  {
+   "name": "source",
+   "type": "SCALAR",
+   "label": "Source",
+   "dataType": "String"
+  },
+  {
+   "name": "address",
+   "type": "COMPOSITE",
+   "label": "Address",
+   "dataType": "Address"
+  },
+  {
+   "name": "owner",
+   "type": "TO_ONE",
+   "label": "Owner",
+   "associatedEntity": {
+    "entity": "CorporateUser"
+   }
+  },
+  {
+   "name": "dateLastModified",
+   "type": "SCALAR",
+   "label": "DateLastModified",
+   "dataType": "Timestamp"
+  },
+  {
+   "name": "customText3",
+   "type": "SCALAR",
+   "dataType": "String",
+   "label": "Clearance Level",
+   "options": [
+    {
+     "value": "S",
+     "label": "Secret"
+    },
+    {
+     "value": "TS",
+     "label": "Top Secret"
+    }
+   ]
+  },
+  {
+   "name": "customText7",
+   "type": "SCALAR",
+   "dataType": "String",
+   "label": "Region"
+  },
+  {
+   "name": "customText9",
+   "type": "SCALAR",
+   "dataType": "String",
+   "label": "customText9"
+  },
+  {
+   "name": "customInt4",
+   "type": "SCALAR",
+   "dataType": "Integer",
+   "label": "Years In Field",
+   "required": true
+  },
+  {
+   "name": "customEncryptedText1",
+   "type": "SCALAR",
+   "dataType": "String",
+   "label": "Badge Number"
+  },
+  {
+   "name": "middleName",
+   "type": "SCALAR",
+   "dataType": "String",
+   "label": "Middle Name"
+  }
+ ]
+}

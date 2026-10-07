@@ -1,0 +1,300 @@
+{
+ "JobOrder": {
+  "entity": "JobOrder",
+  "label": "JobOrder",
+  "fields": [
+   {
+    "name": "id",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "id"
+   },
+   {
+    "name": "dateAdded",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "dateAdded"
+   },
+   {
+    "name": "title",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "title"
+   },
+   {
+    "name": "status",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "status"
+   },
+   {
+    "name": "employmentType",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "employmentType"
+   },
+   {
+    "name": "isOpen",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "isOpen"
+   },
+   {
+    "name": "numOpenings",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "numOpenings"
+   },
+   {
+    "name": "description",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "description"
+   },
+   {
+    "name": "startDate",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "startDate"
+   },
+   {
+    "name": "salary",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "salary"
+   },
+   {
+    "name": "payRate",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "payRate"
+   },
+   {
+    "name": "clientBillRate",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "clientBillRate"
+   },
+   {
+    "name": "address",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "address"
+   },
+   {
+    "name": "clientCorporation",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "clientCorporation"
+   },
+   {
+    "name": "clientContact",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "clientContact"
+   },
+   {
+    "name": "owner",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "owner"
+   },
+   {
+    "name": "customText12",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "Priority",
+    "options": [
+     {
+      "value": "A",
+      "label": "A"
+     },
+     {
+      "value": "B",
+      "label": "B"
+     }
+    ]
+   },
+   {
+    "name": "customText3",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "Old"
+   },
+   {
+    "name": "customInt7",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "Gone soon"
+   }
+  ]
+ },
+ "Candidate": {
+  "entity": "Candidate",
+  "label": "Candidate",
+  "fields": [
+   {
+    "name": "id",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "id"
+   },
+   {
+    "name": "dateAdded",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "dateAdded"
+   },
+   {
+    "name": "firstName",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "firstName"
+   },
+   {
+    "name": "lastName",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "lastName"
+   },
+   {
+    "name": "email",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "email"
+   },
+   {
+    "name": "phone",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "phone"
+   },
+   {
+    "name": "mobile",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "mobile"
+   },
+   {
+    "name": "status",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "status"
+   },
+   {
+    "name": "occupation",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "occupation"
+   },
+   {
+    "name": "skillSet",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "skillSet"
+   },
+   {
+    "name": "source",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "source"
+   },
+   {
+    "name": "address",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "address"
+   },
+   {
+    "name": "owner",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "owner"
+   },
+   {
+    "name": "dateLastModified",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "dateLastModified"
+   }
+  ]
+ },
+ "Appointment": {
+  "entity": "Appointment",
+  "label": "Appointment",
+  "fields": [
+   {
+    "name": "id",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "id"
+   },
+   {
+    "name": "dateAdded",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "dateAdded"
+   },
+   {
+    "name": "subject",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "subject"
+   },
+   {
+    "name": "type",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "type"
+   },
+   {
+    "name": "description",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "description"
+   },
+   {
+    "name": "location",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "location"
+   },
+   {
+    "name": "dateBegin",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "dateBegin"
+   },
+   {
+    "name": "dateEnd",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "dateEnd"
+   },
+   {
+    "name": "candidateReference",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "candidateReference"
+   },
+   {
+    "name": "clientContactReference",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "clientContactReference"
+   },
+   {
+    "name": "jobOrder",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "jobOrder"
+   },
+   {
+    "name": "owner",
+    "type": "SCALAR",
+    "dataType": "String",
+    "label": "owner"
+   }
+  ]
+ }
+}

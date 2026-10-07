@@ -1,0 +1,21 @@
+version: 1
+tenant: acme
+generated_at: 2026-10-06T12:00:00Z
+entities:
+  candidate:
+    standard:
+      skills: customTextBlock2
+    custom:
+      region: customText7
+      label_line: "{firstName} - {occupation}"
+      recruiter_ref: { field: owner, key: id, type: integer }
+    unmapped_bullhorn_fields:
+      - customText12
+      - field: customText3
+        label: Clearance Level
+        data_type: String
+        field_type: SCALAR
+        options:
+          - { value: S, label: Secret }
+        required: false
+        read_only: false

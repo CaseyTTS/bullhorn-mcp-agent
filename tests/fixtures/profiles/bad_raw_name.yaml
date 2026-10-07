@@ -1,0 +1,7 @@
+version: 1
+entities:
+  candidate:
+    standard:
+      email: "e-mail"
+    custom:
+      region: "custom Text7"

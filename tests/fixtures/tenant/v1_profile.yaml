@@ -1,0 +1,10 @@
+version: 1
+tenant: acme
+entities:
+  job:
+    standard:
+      priority: customText12
+      title: title
+    custom:
+      hot_flag: {field: customObject1s, key: id, type: integer}
+      region: customText5

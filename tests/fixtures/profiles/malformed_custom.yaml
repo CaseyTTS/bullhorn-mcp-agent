@@ -1,0 +1,9 @@
+version: 1
+entities:
+  candidate:
+    custom:
+      region: { field: customText7 }
+      shift: { field: owner, key: id, extra: 1 }
+      level: 42
+      BadName: customText1
+      kind: { field: owner, key: id, type: reference }

@@ -1,0 +1,22 @@
+# Note action semantic tags (Phase 4B, D-4B-4).
+#
+# Copied from docs/architecture/CANONICAL_ACTIVITY_VOCABULARY.md, section 2.1.
+# A tag is an optional grouping/suggestion label attached to a tenant action
+# value through a `note_action` value mapping. A tag is never sent to Bullhorn,
+# and an unmapped action value is valid with `action_semantic: null`.
+version: 1
+tags:
+  - tag: candidate_screen
+    meaning: "A screening conversation with a candidate."
+  - tag: client_call
+    meaning: "A conversation with a client contact."
+  - tag: interview_feedback
+    meaning: "Feedback recorded about an interview."
+  - tag: follow_up
+    meaning: "A follow-up action."
+  - tag: email
+    meaning: "Email correspondence that was logged."
+  - tag: reference_check
+    meaning: "A reference check."
+  - tag: other
+    meaning: "Explicitly mapped, with no specific semantic meaning."

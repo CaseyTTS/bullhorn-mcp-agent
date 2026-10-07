@@ -1,0 +1,17 @@
+format: tenant-profile/v2
+tenant: {id: acme, label: Acme Staffing}
+profile_version: 1
+catalog_fingerprint: '0e073dc78538ae31e6a72392a7fc84db70718416b2eca5347cfe92edf4ac4940'
+rest_url_fingerprint: null
+settings: {reporting_timezone: UTC}
+field_mappings:
+  - {entity: job, field: title, target: "1bad"}
+  - {entity: job, field: status, target: "{unclosed"}
+  - {entity: job, field: city, target: "no placeholders {{}}"}
+  - {entity: job, field: state, target: {field: address}}
+  - {entity: job, field: salary, target: {field: address, key: city, extra: 1}}
+  - {entity: job, field: pay_rate, target: [a, b]}
+  - {entity: job, field: bill_rate, target: 12}
+  - {entity: job, field: description, target: "{a!r}"}
+  - {entity: job, field: start_date, target: "{a:>10}"}
+  - {entity: job, field: num_openings, target: "café"}
