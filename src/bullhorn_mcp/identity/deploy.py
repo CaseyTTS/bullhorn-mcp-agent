@@ -23,7 +23,7 @@ Schema (``shared``)::
     service_base_url: https://mcp.example.test          # public https base, no path
     server:
       host: 127.0.0.1                                   # default 127.0.0.1
-      port: 8000                                        # default 8000
+      port: 8000                                        # default 8000; the PORT env var overrides it
       allowed_hosts: [mcp.example.test]                 # required; Host-header allowlist (HV-M7)
     auth:
       issuer: https://idp.example.test                  # AuthSettings.issuer_url
@@ -105,6 +105,7 @@ logger = logging.getLogger("bullhorn_mcp.identity")
 
 ADMIN_CONFIG_ENV_VAR = "BULLHORN_ADMIN_CONFIG"
 TRANSPORT_ENV_VAR = "BULLHORN_MCP_TRANSPORT"
+PORT_ENV_VAR = "PORT"
 LEGACY_IDENTITY_ENV_VARS = ("BULLHORN_MCP_ACTOR", "BULLHORN_SETUP_ADMINS", "BULLHORN_WRITE_APPROVERS")
 CALLBACK_PATH = "/oauth/bullhorn/callback"
 MAX_PROBLEMS = 50
@@ -651,7 +652,19 @@ def fastmcp_auth_kwargs(env: Mapping[str, str] | None = None) -> dict[str, Any]:
     dep = startup(env, CredentialSource(env) if env is not None else None)
     if not dep.shared:
         return {}
-    return shared_fastmcp_kwargs(dep, _ACTIVE.verifier if _ACTIVE is not None else None)
+    kwargs = shared_fastmcp_kwargs(dep, _ACTIVE.verifier if _ACTIVE is not None else None)
+    kwargs["port"] = platform_port(os.environ if env is None else env, kwargs["port"])
+    return kwargs
+
+
+def platform_port(env: Mapping[str, str], default: int) -> int:
+    """The hosting platform's ``PORT`` (e.g. Render) overrides ``server.port`` when set; invalid values are refused."""
+    raw = (env.get(PORT_ENV_VAR) or "").strip()
+    if not raw:
+        return default
+    if not raw.isdigit() or not 1 <= int(raw) <= 65535:
+        raise DeploymentError(f"{PORT_ENV_VAR} must be an integer from 1 to 65535")
+    return int(raw)
 
 
 def shared_fastmcp_kwargs(dep: Deployment, verifier: Any) -> dict[str, Any]:

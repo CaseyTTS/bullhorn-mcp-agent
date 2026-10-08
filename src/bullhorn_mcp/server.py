@@ -2,6 +2,8 @@
 
 import json
 from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 from .config import BullhornConfig
 from .auth import BullhornAuth
@@ -23,6 +25,13 @@ mcp: FastMCP = FastMCP(
     instructions="Query Bullhorn CRM data - jobs, candidates, and placements",
     **deploy.fastmcp_auth_kwargs(),
 )
+
+
+@mcp.custom_route("/healthz", methods=["GET"])
+async def healthz(request: Request) -> PlainTextResponse:
+    """Unauthenticated liveness probe for the hosting platform; returns no data."""
+    return PlainTextResponse("ok")
+
 
 # Global client instance (initialized on first use)
 _client: BullhornClient | None = None

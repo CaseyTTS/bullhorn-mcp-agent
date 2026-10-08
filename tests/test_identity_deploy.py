@@ -275,3 +275,22 @@ class TestSecrets:
 
     def test_ref_repr_has_no_value(self):
         assert "env:A_B" in repr(SecretRef("env:A_B"))
+
+
+def test_platform_port_overrides_config_port():
+    assert deploy.platform_port({}, 8000) == 8000
+    assert deploy.platform_port({"PORT": " "}, 8000) == 8000
+    assert deploy.platform_port({"PORT": "10000"}, 8000) == 10000
+    for bad in ("0", "70000", "abc", "-1", "80.5"):
+        with pytest.raises(deploy.DeploymentError):
+            deploy.platform_port({"PORT": bad}, 8000)
+
+
+def test_healthz_is_unauthenticated_and_returns_ok():
+    from starlette.testclient import TestClient
+
+    from bullhorn_mcp import server
+
+    response = TestClient(server.mcp.streamable_http_app()).get("/healthz")
+    assert response.status_code == 200
+    assert response.text == "ok"
